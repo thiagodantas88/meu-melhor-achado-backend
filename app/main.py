@@ -5,11 +5,14 @@ from app.database import engine, Base
 from app.routers import articles, categories, offers
 from app.scheduler import start_scheduler
 from app.config import settings
+from app.seed import seed
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Cria tabelas e inicia o scheduler ao subir
     Base.metadata.create_all(bind=engine)
+    if settings.AUTO_SEED_ON_START:
+        seed()
     scheduler = start_scheduler()
     yield
     scheduler.shutdown()
