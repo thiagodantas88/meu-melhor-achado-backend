@@ -120,8 +120,8 @@ def seed():
                     summary="In-ear com ANC de até 46dB e 38h de bateria com case.",
                     pros=["ANC potente (46dB)", "Som excelente", "38h total"],
                     cons=["In-ear menos isolante", "App só Android"],
-                    affiliate_url="https://www.magazinevoce.com.br/magazinemeumelhorachado/busca/Xiaomi+Redmi+Buds+5+Pro/",
-                    price="R$ 279", badge="Melhor In-ear", store="magalu"),
+                    affiliate_url="https://www.amazon.com.br/s?k=Xiaomi+Redmi+Buds+5+Pro&tag=meumelhoracha-20",
+                    price="R$ 279", badge="Melhor In-ear", store="amazon"),
         ])
 
         # ── Artigo 3 — Power Bank ─────────────────────────────────────────
