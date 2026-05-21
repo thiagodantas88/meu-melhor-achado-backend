@@ -9,28 +9,73 @@ from datetime import datetime
 
 Base.metadata.create_all(bind=engine)
 
+INITIAL_CATEGORIES = [
+    {
+        "slug": "tecnologia",
+        "name": "Tecnologia",
+        "description": "Celulares, notebooks, acessórios e tudo que conecta você ao mundo.",
+        "icon": "💻",
+        "color": "#1E3A5F",
+    },
+    {
+        "slug": "casa",
+        "name": "Casa",
+        "description": "Eletrodomésticos, decoração e produtos que fazem a diferença no seu lar.",
+        "icon": "🏠",
+        "color": "#1E3A5F",
+    },
+    {
+        "slug": "carro",
+        "name": "Carro",
+        "description": "Pneus, acessórios e produtos automotivos com custo-benefício real.",
+        "icon": "🚗",
+        "color": "#1E3A5F",
+    },
+    {
+        "slug": "home-office",
+        "name": "Home Office",
+        "description": "Cadeiras, mesas, iluminação e tudo para trabalhar bem de casa.",
+        "icon": "🖥️",
+        "color": "#D4A373",
+    },
+    {
+        "slug": "bebidas",
+        "name": "Bebidas",
+        "description": "Seleções de bebidas de melhor qualidade para apreciar, presentear e escolher bem.",
+        "icon": "🍷",
+        "color": "#1E3A5F",
+    },
+    {
+        "slug": "moda",
+        "name": "Moda",
+        "description": "Moda feminina com achados elegantes, versáteis e bom custo-benefício.",
+        "icon": "👗",
+        "color": "#D4A373",
+    },
+]
+
+def sync_categories(db):
+    for item in INITIAL_CATEGORIES:
+        category = db.query(Category).filter(Category.slug == item["slug"]).first()
+        if category:
+            category.name = item["name"]
+            category.description = item["description"]
+            category.icon = item["icon"]
+            category.color = item["color"]
+        else:
+            db.add(Category(**item))
+    db.commit()
+
 def seed():
     db = SessionLocal()
     try:
         if db.query(Category).count() > 0:
-            print("Banco já populado. Nada a fazer.")
+            sync_categories(db)
+            print("Banco já populado. Categorias sincronizadas.")
             return
 
         # ── Categorias ────────────────────────────────────────────────────
-        cats = [
-            Category(slug="tecnologia", name="Tecnologia",
-                     description="Celulares, notebooks, acessórios e tudo que conecta você ao mundo.",
-                     icon="💻", color="#1E3A5F"),
-            Category(slug="casa", name="Casa",
-                     description="Eletrodomésticos, decoração e produtos que fazem a diferença no seu lar.",
-                     icon="🏠", color="#1E3A5F"),
-            Category(slug="carro", name="Carro",
-                     description="Pneus, acessórios e produtos automotivos com custo-benefício real.",
-                     icon="🚗", color="#1E3A5F"),
-            Category(slug="home-office", name="Home Office",
-                     description="Cadeiras, mesas, iluminação e tudo para trabalhar bem de casa.",
-                     icon="🖥️", color="#D4A373"),
-        ]
+        cats = [Category(**item) for item in INITIAL_CATEGORIES]
         for c in cats:
             db.add(c)
         db.flush()
