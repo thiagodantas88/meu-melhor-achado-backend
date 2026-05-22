@@ -10,6 +10,7 @@ import logging
 import re
 from datetime import date, datetime
 from typing import Optional
+from urllib.parse import urlparse
 
 import httpx
 from bs4 import BeautifulSoup
@@ -125,7 +126,9 @@ def fetch_amazon_deals(term: str, category: str) -> list[dict]:
 
 
 def fetch_magalu_deals(term: str, category: str) -> list[dict]:
-    store = settings.MAGALU_STORE.strip("/")
+    configured_store = settings.MAGALU_STORE.strip("/")
+    parsed_store = urlparse(configured_store)
+    store = parsed_store.path.strip("/") if parsed_store.scheme else configured_store
     url = f"https://www.magazinevoce.com.br/{store}/busca/{term.replace(' ', '+')}/"
     results = []
     try:
