@@ -3,7 +3,7 @@ import logging
 from sqlalchemy import inspect, text
 
 from app.database import Base, engine
-from app.models import PriceHistory
+from app.models import PriceHistory, ScraperLog
 
 logger = logging.getLogger(__name__)
 
@@ -61,3 +61,5 @@ def ensure_database_schema() -> None:
 
     Base.metadata.create_all(bind=engine, tables=[PriceHistory.__table__])
     logger.info("Tabela price_history garantida")
+    Base.metadata.create_all(bind=engine, tables=[ScraperLog.__table__])
+    logger.info("Tabela scraper_logs garantida")

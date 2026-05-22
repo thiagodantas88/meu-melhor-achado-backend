@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
 from app.migrations import ensure_database_schema
-from app.routers import articles, categories, comparisons, deals, offers
+from app.routers import admin, articles, categories, comparisons, deals, offers
 from app.scheduler import start_scheduler
 from app.seed import seed
 
@@ -39,6 +39,7 @@ app.add_middleware(
 )
 
 app.include_router(articles.router)
+app.include_router(admin.router)
 app.include_router(categories.router)
 app.include_router(comparisons.router)
 app.include_router(deals.router)

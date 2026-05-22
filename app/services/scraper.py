@@ -17,7 +17,7 @@ from bs4 import BeautifulSoup
 from sqlalchemy.orm import Session
 
 from app.config import settings
-from app.models import DailyComparison, Deal, PriceHistory, Product
+from app.models import DailyComparison, Deal, PriceHistory, Product, ScraperLog
 
 logger = logging.getLogger(__name__)
 
@@ -319,52 +319,90 @@ def run_daily_job(db: Session):
     logger.info("Iniciando robo diario do Meu Melhor Achado")
     today = date.today().strftime("%Y-%m-%d")
     run_id = datetime.now().strftime("%Y-%m-%d_%H:%M")
+    scraper_log = None
 
-    db.query(Deal).update({"is_active": False})
-    db.commit()
+    if settings.LOG_SCRAPER_RUNS:
+        scraper_log = ScraperLog(run_id=run_id, status="running")
+        db.add(scraper_log)
+        db.commit()
 
-    all_deals = []
-    for category, term in SEARCH_TERMS:
-        amazon_deals = fetch_amazon_deals(term, category)
-        magalu_deals = fetch_magalu_deals(term, category)
-        all_deals.extend(amazon_deals)
-        all_deals.extend(magalu_deals)
-        logger.info("%s: %s Amazon + %s Magalu", term, len(amazon_deals), len(magalu_deals))
+    amazon_total = 0
+    magalu_total = 0
+    fallback_count = 0
 
-    if not all_deals:
-        logger.info("Nenhuma oferta externa encontrada; usando fallback de produtos indicados")
-        all_deals = build_fallback_deals_from_products(db)
+    try:
+        db.query(Deal).update({"is_active": False})
+        db.commit()
 
-    for deal_data in all_deals:
-        db.add(Deal(**deal_data, is_active=True))
-    db.commit()
-    logger.info("%s ofertas salvas", len(all_deals))
+        all_deals = []
+        for category, term in SEARCH_TERMS:
+            amazon_deals = fetch_amazon_deals(term, category)
+            magalu_deals = fetch_magalu_deals(term, category)
+            amazon_total += len(amazon_deals)
+            magalu_total += len(magalu_deals)
+            all_deals.extend(amazon_deals)
+            all_deals.extend(magalu_deals)
+            logger.info("%s: %s Amazon + %s Magalu", term, len(amazon_deals), len(magalu_deals))
 
-    for deal_data in all_deals:
-        db.add(
-            PriceHistory(
-                product_name=deal_data["product_name"],
-                price=deal_data["deal_price"],
-                source=deal_data["source"],
-                category=deal_data["category"],
-                affiliate_url=deal_data["affiliate_url"],
-                scraper_run=run_id,
+        if not all_deals and settings.SCRAPER_FALLBACK_ENABLED:
+            logger.info("Nenhuma oferta externa encontrada; usando fallback de produtos indicados")
+            all_deals = build_fallback_deals_from_products(db)
+            fallback_count = len(all_deals)
+
+        if settings.SCRAPER_MAX_DEALS_PER_RUN > 0:
+            all_deals = all_deals[: settings.SCRAPER_MAX_DEALS_PER_RUN]
+            if fallback_count:
+                fallback_count = min(fallback_count, len(all_deals))
+
+        for deal_data in all_deals:
+            db.add(Deal(**deal_data, is_active=True))
+        db.commit()
+        logger.info("%s ofertas salvas", len(all_deals))
+
+        for deal_data in all_deals:
+            db.add(
+                PriceHistory(
+                    product_name=deal_data["product_name"],
+                    price=deal_data["deal_price"],
+                    source=deal_data["source"],
+                    category=deal_data["category"],
+                    affiliate_url=deal_data["affiliate_url"],
+                    scraper_run=run_id,
+                )
             )
-        )
-    db.commit()
-    logger.info("%s precos registrados no historico (run: %s)", len(all_deals), run_id)
+        db.commit()
+        logger.info("%s precos registrados no historico (run: %s)", len(all_deals), run_id)
 
-    comparisons = generate_comparisons(all_deals)
-    for comparison in comparisons:
-        db.add(
-            DailyComparison(
-                date=today,
-                title=comparison["title"],
-                summary=comparison["summary"],
-                category=comparison["category"],
-                product_a=comparison["product_a"],
-                product_b=comparison["product_b"],
+        comparisons = generate_comparisons(all_deals)
+        for comparison in comparisons:
+            db.add(
+                DailyComparison(
+                    date=today,
+                    title=comparison["title"],
+                    summary=comparison["summary"],
+                    category=comparison["category"],
+                    product_a=comparison["product_a"],
+                    product_b=comparison["product_b"],
+                )
             )
-        )
-    db.commit()
-    logger.info("%s comparativos gerados para %s", len(comparisons), today)
+        db.commit()
+        logger.info("%s comparativos gerados para %s", len(comparisons), today)
+
+        if scraper_log:
+            scraper_log.deals_found = len(all_deals)
+            scraper_log.deals_published = len(all_deals)
+            scraper_log.deals_fallback = fallback_count
+            scraper_log.amazon_found = amazon_total
+            scraper_log.magalu_found = magalu_total
+            scraper_log.finished_at = datetime.now()
+            scraper_log.status = "ok"
+            db.commit()
+    except Exception as exc:
+        db.rollback()
+        if scraper_log:
+            scraper_log.finished_at = datetime.now()
+            scraper_log.errors = 1
+            scraper_log.status = "error"
+            scraper_log.notes = str(exc)[:1000]
+            db.commit()
+        raise

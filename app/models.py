@@ -119,3 +119,19 @@ class PriceHistory(Base):
     affiliate_url = Column(String(1000))
     recorded_at = Column(DateTime, server_default=func.now())
     scraper_run = Column(String(50))
+
+class ScraperLog(Base):
+    __tablename__ = "scraper_logs"
+
+    id = Column(Integer, primary_key=True)
+    run_id = Column(String(50))
+    started_at = Column(DateTime, server_default=func.now())
+    finished_at = Column(DateTime, nullable=True)
+    deals_found = Column(Integer, default=0)
+    deals_published = Column(Integer, default=0)
+    deals_fallback = Column(Integer, default=0)
+    amazon_found = Column(Integer, default=0)
+    magalu_found = Column(Integer, default=0)
+    errors = Column(Integer, default=0)
+    status = Column(String(50), default="ok")
+    notes = Column(Text, nullable=True)
