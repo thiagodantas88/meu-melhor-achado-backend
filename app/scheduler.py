@@ -1,29 +1,32 @@
+import logging
+
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
-import asyncio
-from app.database import SessionLocal
-from app.scraper.generator import generate_daily_comparatives
-import pytz
 
-def run_daily_job():
-    """Wrapper síncrono para rodar a corrotina assíncrona."""
-    print("[Scheduler] Iniciando job diário...")
-    db = SessionLocal()
-    try:
-        asyncio.run(generate_daily_comparatives(db))
-    except Exception as e:
-        print(f"[Scheduler] Erro no job diário: {e}")
-    finally:
-        db.close()
+from app.database import SessionLocal
+from app.services.scraper import run_daily_job
+
+logger = logging.getLogger(__name__)
+
 
 def start_scheduler():
-    scheduler = BackgroundScheduler(timezone=pytz.timezone("America/Sao_Paulo"))
+    scheduler = BackgroundScheduler(timezone="America/Sao_Paulo")
+
+    def job():
+        db = SessionLocal()
+        try:
+            run_daily_job(db)
+        except Exception as exc:
+            logger.error("Erro no job diário: %s", exc)
+        finally:
+            db.close()
+
     scheduler.add_job(
-        run_daily_job,
-        trigger=CronTrigger(hour=6, minute=0),  # todo dia às 6h horário de Brasília
-        id="daily_comparatives",
+        job,
+        trigger=CronTrigger(hour=6, minute=0, timezone="America/Sao_Paulo"),
+        id="daily_scraper",
         replace_existing=True,
     )
     scheduler.start()
-    print("[Scheduler] Robô diário ativo — roda todo dia às 06:00 (Brasília)")
+    logger.info("Agendador iniciado: robo roda todo dia as 06:00 (Brasilia)")
     return scheduler

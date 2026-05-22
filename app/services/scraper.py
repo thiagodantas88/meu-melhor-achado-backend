@@ -1,0 +1,255 @@
+"""
+Robo diario do Meu Melhor Achado.
+
+Busca ofertas na Amazon e no Magalu, salva deals ativos e gera comparativos
+simples para a API. O scraper falha de forma silenciosa por loja/termo para
+nao derrubar o backend caso uma pagina mude markup ou bloqueie a requisicao.
+"""
+
+import logging
+import re
+from datetime import date, datetime
+from typing import Optional
+
+import httpx
+from bs4 import BeautifulSoup
+from sqlalchemy.orm import Session
+
+from app.config import settings
+from app.models import DailyComparison, Deal
+
+logger = logging.getLogger(__name__)
+
+HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/124.0.0.0 Safari/537.36"
+    ),
+    "Accept-Language": "pt-BR,pt;q=0.9",
+}
+
+SEARCH_TERMS = [
+    ("tecnologia", "fone de ouvido bluetooth"),
+    ("tecnologia", "carregador usb-c"),
+    ("tecnologia", "cabo usb-c"),
+    ("tecnologia", "power bank"),
+    ("casa", "air fryer"),
+    ("casa", "aspirador de po"),
+    ("home-office", "mouse sem fio"),
+    ("home-office", "teclado mecanico"),
+    ("carro", "suporte celular carro"),
+    ("carro", "carregador veicular"),
+    ("bebidas", "vinho"),
+    ("bebidas", "cafe gourmet"),
+    ("moda", "vestido feminino"),
+    ("moda", "bolsa feminina"),
+]
+
+COMPARISON_TEMPLATES = [
+    {
+        "title": "{a} vs {b}: qual vale mais em {month}?",
+        "summary": "Comparamos os dois modelos mais buscados da categoria e apontamos qual entrega mais pelo preço.",
+    },
+    {
+        "title": "{a} ou {b}? A escolha certa para voce",
+        "summary": "Dois produtos similares, perfis de uso diferentes. Veja qual combina com o seu dia a dia.",
+    },
+    {
+        "title": "Custo-beneficio: {a} contra {b}",
+        "summary": "Analisamos preco, qualidade e durabilidade para voce decidir com seguranca.",
+    },
+]
+
+
+def parse_price(text: str) -> Optional[float]:
+    try:
+        cleaned = re.sub(r"[^\d,]", "", text).replace(",", ".")
+        return float(cleaned)
+    except Exception:
+        return None
+
+
+def fetch_amazon_deals(term: str, category: str) -> list[dict]:
+    url = f"https://www.amazon.com.br/s?k={term.replace(' ', '+')}&tag={settings.AMAZON_TAG}"
+    results = []
+    try:
+        with httpx.Client(headers=HEADERS, timeout=15, follow_redirects=True) as client:
+            response = client.get(url)
+        if response.status_code != 200:
+            return results
+
+        soup = BeautifulSoup(response.text, "html.parser")
+        items = soup.select("div[data-component-type='s-search-result']")
+
+        for item in items[:8]:
+            name_el = item.select_one("h2 span")
+            price_el = item.select_one("span.a-price > span.a-offscreen")
+            old_el = item.select_one("span.a-price.a-text-price > span.a-offscreen")
+            link_el = item.select_one("h2 a")
+            img_el = item.select_one("img.s-image")
+
+            if not (name_el and price_el and link_el):
+                continue
+
+            new_price = parse_price(price_el.get_text())
+            old_price = parse_price(old_el.get_text()) if old_el else None
+            href = link_el.get("href", "")
+            asin_match = re.search(r"/dp/([A-Z0-9]{10})", href)
+
+            if not new_price or not asin_match:
+                continue
+
+            discount_pct = 0
+            if old_price and old_price > new_price:
+                discount_pct = int(((old_price - new_price) / old_price) * 100)
+
+            if discount_pct >= 15 or (discount_pct == 0 and new_price < 300):
+                asin = asin_match.group(1)
+                results.append(
+                    {
+                        "product_name": name_el.get_text(strip=True)[:290],
+                        "original_price": old_price or new_price,
+                        "deal_price": new_price,
+                        "discount_pct": discount_pct,
+                        "affiliate_url": f"https://www.amazon.com.br/dp/{asin}?tag={settings.AMAZON_TAG}",
+                        "source": "amazon",
+                        "category": category,
+                        "image_url": img_el.get("src", "") if img_el else "",
+                    }
+                )
+    except Exception as exc:
+        logger.error("Erro ao buscar Amazon [%s]: %s", term, exc)
+
+    return results
+
+
+def fetch_magalu_deals(term: str, category: str) -> list[dict]:
+    store = settings.MAGALU_STORE.strip("/")
+    url = f"https://www.magazinevoce.com.br/{store}/busca/{term.replace(' ', '+')}/"
+    results = []
+    try:
+        with httpx.Client(headers=HEADERS, timeout=15, follow_redirects=True) as client:
+            response = client.get(url)
+        if response.status_code != 200:
+            return results
+
+        soup = BeautifulSoup(response.text, "html.parser")
+        items = soup.select("li[data-testid='product-card']")
+
+        for item in items[:6]:
+            name_el = item.select_one("[data-testid='product-title']")
+            price_el = item.select_one("[data-testid='price-value']")
+            old_el = item.select_one("[data-testid='price-original']")
+            link_el = item.select_one("a")
+            img_el = item.select_one("img")
+
+            if not (name_el and price_el and link_el):
+                continue
+
+            new_price = parse_price(price_el.get_text())
+            old_price = parse_price(old_el.get_text()) if old_el else None
+            if not new_price:
+                continue
+
+            href = link_el.get("href", "")
+            affiliate_url = href if href.startswith("http") else f"https://www.magazinevoce.com.br{href}"
+
+            discount_pct = 0
+            if old_price and old_price > new_price:
+                discount_pct = int(((old_price - new_price) / old_price) * 100)
+
+            if discount_pct >= 15:
+                results.append(
+                    {
+                        "product_name": name_el.get_text(strip=True)[:290],
+                        "original_price": old_price or new_price,
+                        "deal_price": new_price,
+                        "discount_pct": discount_pct,
+                        "affiliate_url": affiliate_url,
+                        "source": "magalu",
+                        "category": category,
+                        "image_url": img_el.get("src", "") if img_el else "",
+                    }
+                )
+    except Exception as exc:
+        logger.error("Erro ao buscar Magalu [%s]: %s", term, exc)
+
+    return results
+
+
+def generate_comparisons(deals: list[dict]) -> list[dict]:
+    by_category: dict[str, list[dict]] = {}
+    for deal in deals:
+        by_category.setdefault(deal["category"], []).append(deal)
+
+    comparisons = []
+    month = datetime.now().strftime("%m/%Y")
+
+    for index, (category, items) in enumerate(by_category.items()):
+        if len(items) < 2 or len(comparisons) >= 3:
+            break
+
+        product_a, product_b = items[0], items[1]
+        template = COMPARISON_TEMPLATES[index % len(COMPARISON_TEMPLATES)]
+        comparisons.append(
+            {
+                "title": template["title"].format(
+                    a=product_a["product_name"][:40],
+                    b=product_b["product_name"][:40],
+                    month=month,
+                ),
+                "summary": template["summary"],
+                "category": category,
+                "product_a": {
+                    "name": product_a["product_name"],
+                    "price": f"R$ {product_a['deal_price']:.2f}".replace(".", ","),
+                    "affiliate_url": product_a["affiliate_url"],
+                    "pros": ["Melhor preco do dia", f"{product_a['discount_pct']}% de desconto"],
+                },
+                "product_b": {
+                    "name": product_b["product_name"],
+                    "price": f"R$ {product_b['deal_price']:.2f}".replace(".", ","),
+                    "affiliate_url": product_b["affiliate_url"],
+                    "pros": ["Boa avaliacao", "Disponibilidade imediata"],
+                },
+            }
+        )
+
+    return comparisons
+
+
+def run_daily_job(db: Session):
+    logger.info("Iniciando robo diario do Meu Melhor Achado")
+    today = date.today().strftime("%Y-%m-%d")
+
+    db.query(Deal).update({"is_active": False})
+    db.commit()
+
+    all_deals = []
+    for category, term in SEARCH_TERMS:
+        amazon_deals = fetch_amazon_deals(term, category)
+        magalu_deals = fetch_magalu_deals(term, category)
+        all_deals.extend(amazon_deals)
+        all_deals.extend(magalu_deals)
+        logger.info("%s: %s Amazon + %s Magalu", term, len(amazon_deals), len(magalu_deals))
+
+    for deal_data in all_deals:
+        db.add(Deal(**deal_data, is_active=True))
+    db.commit()
+    logger.info("%s ofertas salvas", len(all_deals))
+
+    comparisons = generate_comparisons(all_deals)
+    for comparison in comparisons:
+        db.add(
+            DailyComparison(
+                date=today,
+                title=comparison["title"],
+                summary=comparison["summary"],
+                category=comparison["category"],
+                product_a=comparison["product_a"],
+                product_b=comparison["product_b"],
+            )
+        )
+    db.commit()
+    logger.info("%s comparativos gerados para %s", len(comparisons), today)

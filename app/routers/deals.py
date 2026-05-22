@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models import Deal
 
-router = APIRouter(prefix="/offers", tags=["offers"])
+router = APIRouter(prefix="/deals", tags=["deals"])
 
 
 def serialize_deal(deal: Deal):
@@ -23,13 +23,8 @@ def serialize_deal(deal: Deal):
 
 
 @router.get("/")
-def list_offers(category: str = Query(None), limit: int = Query(20), db: Session = Depends(get_db)):
+def list_deals(category: str = Query(None), limit: int = Query(20), db: Session = Depends(get_db)):
     query = db.query(Deal).filter(Deal.is_active == True).order_by(desc(Deal.discount_pct))
     if category:
         query = query.filter(Deal.category == category)
     return [serialize_deal(deal) for deal in query.limit(limit).all()]
-
-
-@router.get("/products")
-def list_offer_products(category: str = Query(None), limit: int = Query(30), db: Session = Depends(get_db)):
-    return list_offers(category=category, limit=limit, db=db)
