@@ -20,7 +20,8 @@ async def lifespan(app: FastAPI):
         seed()
     scheduler = start_scheduler()
     yield
-    scheduler.shutdown()
+    if scheduler:
+        scheduler.shutdown()
 
 
 app = FastAPI(
