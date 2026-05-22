@@ -107,3 +107,15 @@ class Deal(Base):
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, server_default=func.now())
     expires_at = Column(DateTime, nullable=True)
+
+class PriceHistory(Base):
+    __tablename__ = "price_history"
+
+    id = Column(Integer, primary_key=True)
+    product_name = Column(String(300), nullable=False)
+    price = Column(Float, nullable=False)
+    source = Column(String(50))
+    category = Column(String(100))
+    affiliate_url = Column(String(1000))
+    recorded_at = Column(DateTime, server_default=func.now())
+    scraper_run = Column(String(50))

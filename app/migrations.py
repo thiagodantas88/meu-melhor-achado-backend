@@ -1,6 +1,11 @@
+import logging
+
 from sqlalchemy import inspect, text
 
 from app.database import Base, engine
+from app.models import PriceHistory
+
+logger = logging.getLogger(__name__)
 
 
 def _table_columns(table_name: str) -> set[str]:
@@ -53,3 +58,6 @@ def ensure_database_schema() -> None:
             refreshed_columns = _table_columns("products")
             if {"store", "source"}.issubset(refreshed_columns):
                 conn.execute(text("UPDATE products SET source = store WHERE source IS NULL AND store IS NOT NULL"))
+
+    Base.metadata.create_all(bind=engine, tables=[PriceHistory.__table__])
+    logger.info("Tabela price_history garantida")

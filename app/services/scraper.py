@@ -17,7 +17,7 @@ from bs4 import BeautifulSoup
 from sqlalchemy.orm import Session
 
 from app.config import settings
-from app.models import DailyComparison, Deal, Product
+from app.models import DailyComparison, Deal, PriceHistory, Product
 
 logger = logging.getLogger(__name__)
 
@@ -318,6 +318,7 @@ def generate_comparisons(deals: list[dict]) -> list[dict]:
 def run_daily_job(db: Session):
     logger.info("Iniciando robo diario do Meu Melhor Achado")
     today = date.today().strftime("%Y-%m-%d")
+    run_id = datetime.now().strftime("%Y-%m-%d_%H:%M")
 
     db.query(Deal).update({"is_active": False})
     db.commit()
@@ -338,6 +339,20 @@ def run_daily_job(db: Session):
         db.add(Deal(**deal_data, is_active=True))
     db.commit()
     logger.info("%s ofertas salvas", len(all_deals))
+
+    for deal_data in all_deals:
+        db.add(
+            PriceHistory(
+                product_name=deal_data["product_name"],
+                price=deal_data["deal_price"],
+                source=deal_data["source"],
+                category=deal_data["category"],
+                affiliate_url=deal_data["affiliate_url"],
+                scraper_run=run_id,
+            )
+        )
+    db.commit()
+    logger.info("%s precos registrados no historico (run: %s)", len(all_deals), run_id)
 
     comparisons = generate_comparisons(all_deals)
     for comparison in comparisons:
