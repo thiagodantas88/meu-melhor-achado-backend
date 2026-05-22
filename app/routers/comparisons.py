@@ -10,12 +10,26 @@ from app.models import DailyComparison
 router = APIRouter(prefix="/comparisons", tags=["comparisons"])
 
 
+def sanitize_product(product):
+    if not isinstance(product, dict):
+        return product
+
+    sanitized = dict(product)
+    pros = sanitized.get("pros")
+    if isinstance(pros, list):
+        sanitized["pros"] = [
+            "Produto selecionado" if pro == "0% de desconto" else pro
+            for pro in pros
+        ]
+    return sanitized
+
+
 def serialize_comparison(comparison: DailyComparison):
     return {
         "id": comparison.id,
         "title": comparison.title,
-        "productA": comparison.product_a,
-        "productB": comparison.product_b,
+        "productA": sanitize_product(comparison.product_a),
+        "productB": sanitize_product(comparison.product_b),
         "summary": comparison.summary,
         "category": comparison.category,
         "date": comparison.date,
