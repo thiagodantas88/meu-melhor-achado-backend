@@ -27,6 +27,13 @@ def start_scheduler():
         id="daily_scraper",
         replace_existing=True,
     )
+    scheduler.add_job(
+        job,
+        trigger=CronTrigger(hour=18, minute=30, timezone="America/Sao_Paulo"),
+        id="evening_scraper",
+        replace_existing=True,
+    )
     scheduler.start()
     logger.info("Agendador iniciado: robo roda todo dia as 06:00 (Brasilia)")
+    logger.info("Segunda rodada agendada: 18:30 (Brasilia)")
     return scheduler
