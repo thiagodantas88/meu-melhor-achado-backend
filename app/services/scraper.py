@@ -86,6 +86,12 @@ def extract_image_from_affiliate_link(url: Optional[str]) -> Optional[str]:
     if not url:
         return None
 
+    parsed = urlparse(url)
+    if parsed.netloc.endswith("amazon.com.br") and parsed.path.startswith("/s"):
+        return None
+    if "magazinevoce.com.br" in parsed.netloc and "/busca/" in parsed.path:
+        return None
+
     try:
         with httpx.Client(headers=HEADERS, timeout=12, follow_redirects=True) as client:
             response = client.get(url)
