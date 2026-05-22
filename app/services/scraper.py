@@ -17,7 +17,7 @@ from bs4 import BeautifulSoup
 from sqlalchemy.orm import Session
 
 from app.config import settings
-from app.models import DailyComparison, Deal
+from app.models import DailyComparison, Deal, Product
 
 logger = logging.getLogger(__name__)
 
@@ -69,6 +69,36 @@ def parse_price(text: str) -> Optional[float]:
         return float(cleaned)
     except Exception:
         return None
+
+
+def build_fallback_deals_from_products(db: Session) -> list[dict]:
+    products = db.query(Product).filter(Product.affiliate_url.isnot(None)).limit(12).all()
+    fallback_deals = []
+
+    for product in products:
+        deal_price = parse_price(product.price or "")
+        if not deal_price:
+            continue
+
+        category = "tecnologia"
+        if product.article and product.article.category:
+            category = product.article.category.slug
+
+        fallback_deals.append(
+            {
+                "product_name": product.name[:290],
+                "original_price": deal_price,
+                "deal_price": deal_price,
+                "discount_pct": 0,
+                "affiliate_url": product.affiliate_url,
+                "source": product.source or product.store or "amazon",
+                "category": category,
+                "image_url": product.image_url,
+            }
+        )
+
+    logger.info("%s ofertas fallback geradas a partir dos produtos indicados", len(fallback_deals))
+    return fallback_deals
 
 
 def fetch_amazon_deals(term: str, category: str) -> list[dict]:
@@ -236,6 +266,10 @@ def run_daily_job(db: Session):
         all_deals.extend(amazon_deals)
         all_deals.extend(magalu_deals)
         logger.info("%s: %s Amazon + %s Magalu", term, len(amazon_deals), len(magalu_deals))
+
+    if not all_deals:
+        logger.info("Nenhuma oferta externa encontrada; usando fallback de produtos indicados")
+        all_deals = build_fallback_deals_from_products(db)
 
     for deal_data in all_deals:
         db.add(Deal(**deal_data, is_active=True))
