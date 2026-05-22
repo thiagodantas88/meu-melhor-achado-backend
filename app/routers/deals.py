@@ -14,7 +14,7 @@ def serialize_deal(deal: Deal):
         "productName": deal.product_name,
         "originalPrice": deal.original_price,
         "dealPrice": deal.deal_price,
-        "discountPct": deal.discount_pct,
+        "discountPct": deal.discount_pct if (deal.discount_pct and deal.discount_pct > 0) else None,
         "affiliateUrl": deal.affiliate_url,
         "source": deal.source,
         "category": deal.category,

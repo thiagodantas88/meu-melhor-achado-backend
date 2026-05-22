@@ -283,6 +283,11 @@ def generate_comparisons(deals: list[dict]) -> list[dict]:
 
         product_a, product_b = items[0], items[1]
         template = COMPARISON_TEMPLATES[index % len(COMPARISON_TEMPLATES)]
+        product_a_pros = (
+            ["Melhor preco do dia", "Produto selecionado"]
+            if product_a.get("discount_pct", 0) == 0
+            else ["Melhor preco do dia", f"{product_a['discount_pct']}% de desconto"]
+        )
         comparisons.append(
             {
                 "title": template["title"].format(
@@ -296,7 +301,7 @@ def generate_comparisons(deals: list[dict]) -> list[dict]:
                     "name": product_a["product_name"],
                     "price": f"R$ {product_a['deal_price']:.2f}".replace(".", ","),
                     "affiliate_url": product_a["affiliate_url"],
-                    "pros": ["Melhor preco do dia", f"{product_a['discount_pct']}% de desconto"],
+                    "pros": product_a_pros,
                 },
                 "product_b": {
                     "name": product_b["product_name"],
