@@ -72,7 +72,7 @@ def parse_price(text: str) -> Optional[float]:
 
 
 def build_fallback_deals_from_products(db: Session) -> list[dict]:
-    products = db.query(Product).filter(Product.affiliate_url.isnot(None)).limit(12).all()
+    products = db.query(Product).filter(Product.affiliate_url.isnot(None)).limit(60).all()
     fallback_deals = []
 
     for product in products:
