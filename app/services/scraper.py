@@ -10,7 +10,7 @@ import logging
 import re
 from datetime import date, datetime
 from typing import Optional
-from urllib.parse import urlparse
+from urllib.parse import urljoin, urlparse
 
 import httpx
 from bs4 import BeautifulSoup
@@ -71,6 +71,60 @@ def parse_price(text: str) -> Optional[float]:
         return None
 
 
+def normalize_image_url(candidate: Optional[str], base_url: str) -> Optional[str]:
+    if not candidate:
+        return None
+
+    image_url = candidate.split()[0].strip()
+    if not image_url or image_url.startswith("data:"):
+        return None
+
+    return urljoin(base_url, image_url)
+
+
+def extract_image_from_affiliate_link(url: Optional[str]) -> Optional[str]:
+    if not url:
+        return None
+
+    try:
+        with httpx.Client(headers=HEADERS, timeout=12, follow_redirects=True) as client:
+            response = client.get(url)
+    except Exception as exc:
+        logger.debug("Nao foi possivel buscar imagem do link %s: %s", url, exc)
+        return None
+
+    if response.status_code != 200:
+        logger.debug("Link %s retornou status %s ao buscar imagem", url, response.status_code)
+        return None
+
+    soup = BeautifulSoup(response.text, "html.parser")
+    for selector in [
+        "meta[property='og:image']",
+        "meta[name='twitter:image']",
+        "img#landingImage",
+        "img.s-image",
+        "img[data-testid='product-image']",
+        "img[data-testid='image']",
+        "img[src]",
+    ]:
+        element = soup.select_one(selector)
+        if not element:
+            continue
+
+        candidate = (
+            element.get("content")
+            or element.get("data-old-hires")
+            or element.get("data-src")
+            or element.get("src")
+            or element.get("srcset")
+        )
+        image_url = normalize_image_url(candidate, str(response.url))
+        if image_url and not image_url.endswith(".gif"):
+            return image_url
+
+    return None
+
+
 def build_fallback_deals_from_products(db: Session) -> list[dict]:
     products = db.query(Product).filter(Product.affiliate_url.isnot(None)).limit(60).all()
     fallback_deals = []
@@ -84,6 +138,10 @@ def build_fallback_deals_from_products(db: Session) -> list[dict]:
         if product.article and product.article.category:
             category = product.article.category.slug
 
+        image_url = product.image_url or extract_image_from_affiliate_link(product.affiliate_url)
+        if image_url and product.image_url != image_url:
+            product.image_url = image_url
+
         fallback_deals.append(
             {
                 "product_name": product.name[:290],
@@ -93,7 +151,7 @@ def build_fallback_deals_from_products(db: Session) -> list[dict]:
                 "affiliate_url": product.affiliate_url,
                 "source": product.source or product.store or "amazon",
                 "category": category,
-                "image_url": product.image_url,
+                "image_url": image_url,
             }
         )
 

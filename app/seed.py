@@ -9,7 +9,7 @@ from datetime import datetime
 
 from app.database import SessionLocal
 from app.migrations import ensure_database_schema
-from app.models import Article, Category, ContentSection, Product
+from app.models import Article, Category, ContentSection, Deal, Product
 
 CATEGORIES = [
     {
@@ -55,6 +55,33 @@ CATEGORIES = [
         "color": "#D4A373",
     },
 ]
+
+PRODUCT_IMAGE_URLS = {
+    "Acer Aspire 5 (A515-45)": "https://images.unsplash.com/photo-1496181133206-80ce9b88a853?w=800&q=80",
+    "Lenovo IdeaPad 3i (Core i5)": "https://images.unsplash.com/photo-1517336714731-489689fd1ca8?w=800&q=80",
+    "Samsung Galaxy Book4": "https://images.unsplash.com/photo-1525547719571-a2d4ac8945e2?w=800&q=80",
+    "JBL Tune 510BT": "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=800&q=80",
+    "Anker Soundcore Q20i": "https://images.unsplash.com/photo-1484704849700-f032a568e944?w=800&q=80",
+    "Xiaomi Redmi Buds 5 Pro": "https://images.unsplash.com/photo-1606220945770-b5b6c2c55bf1?w=800&q=80",
+    "Xiaomi Power Bank 3 - 10.000 mAh": "https://images.unsplash.com/photo-1609091839311-d5365f9ff1c5?w=800&q=80",
+    "Baseus Adaman 20.000 mAh": "https://images.unsplash.com/photo-1616348436168-de43ad0db179?w=800&q=80",
+    "Anker PowerCore Slim 10.000 mAh": "https://images.unsplash.com/photo-1583394838336-acd977736f90?w=800&q=80",
+    "Mondial Air Fryer Family 4L": "https://images.unsplash.com/photo-1556911220-bff31c812dba?w=800&q=80",
+    "Philco Air Fryer Oven 12L": "https://images.unsplash.com/photo-1556909114-f6e7ad7d3136?w=800&q=80",
+    "Midea Air Fryer 4L": "https://images.unsplash.com/photo-1585515320310-259814833e62?w=800&q=80",
+    "Baseus Suporte Veicular Magnético": "https://images.unsplash.com/photo-1517524008697-84bbe3c3fd98?w=800&q=80",
+    "i2GO Suporte Veicular Universal": "https://images.unsplash.com/photo-1449965408869-eaa3f722e40d?w=800&q=80",
+    "Geonav Suporte Veicular com Ventosa": "https://images.unsplash.com/photo-1503376780353-7e6692767b70?w=800&q=80",
+    "Flexform Uni": "https://images.unsplash.com/photo-1586023492125-27b2c045efd7?w=800&q=80",
+    "Elements Astra": "https://images.unsplash.com/photo-1598300042247-d088f8ab3a91?w=800&q=80",
+    "Cadeira Presidente Tela Mesh": "https://images.unsplash.com/photo-1505693416388-ac5ce068fe85?w=800&q=80",
+    "Casillero del Diablo Cabernet Sauvignon": "https://images.unsplash.com/photo-1510812431401-41d2bd2722f3?w=800&q=80",
+    "Miolo Seleção Merlot Cabernet": "https://images.unsplash.com/photo-1506377247377-2a5b3b417ebb?w=800&q=80",
+    "Chandon Brut": "https://images.unsplash.com/photo-1578911373434-0cb395d2cbfb?w=800&q=80",
+    "Vestido Midi Feminino": "https://images.unsplash.com/photo-1483985988355-763728e1935b?w=800&q=80",
+    "Bolsa Feminina Transversal": "https://images.unsplash.com/photo-1594223274512-ad4803739b7c?w=800&q=80",
+    "Tênis Casual Feminino Branco": "https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=800&q=80",
+}
 
 ARTICLES = [
     {
@@ -602,7 +629,18 @@ def seed():
             db.query(Product).filter(Product.article_id == article.id).delete()
             for product_data in article_data["products"]:
                 source = product_data.get("source", "amazon")
-                db.add(Product(**product_data, store=source, article_id=article.id))
+                product_payload = {
+                    **product_data,
+                    "image_url": product_data.get("image_url") or PRODUCT_IMAGE_URLS.get(product_data["name"]),
+                }
+                db.add(Product(**product_payload, store=source, article_id=article.id))
+
+        db.flush()
+        for product in db.query(Product).filter(Product.image_url.isnot(None)).all():
+            db.query(Deal).filter(Deal.product_name == product.name).update(
+                {"image_url": product.image_url},
+                synchronize_session=False,
+            )
 
         db.commit()
         print(f"Seed concluido: {len(CATEGORIES)} categorias, {len(ARTICLES)} artigos")
