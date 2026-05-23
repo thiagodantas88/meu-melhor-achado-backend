@@ -7,6 +7,8 @@ Pode rodar no startup ou manualmente com:
 
 from datetime import datetime
 
+from add_articles import NEW_ARTICLES
+
 from app.database import SessionLocal
 from app.migrations import ensure_database_schema
 from app.models import Article, Category, ContentSection, Deal, Product
@@ -540,6 +542,8 @@ ARTICLES = [
         ],
     },
 ]
+
+ARTICLES.extend(NEW_ARTICLES)
 
 
 def _upsert_category(db, data):
