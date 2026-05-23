@@ -49,16 +49,16 @@ SEARCH_TERMS = [
 
 COMPARISON_TEMPLATES = [
     {
-        "title": "{a} vs {b}: qual vale mais em {month}?",
-        "summary": "Comparamos os dois modelos mais buscados da categoria e apontamos qual entrega mais pelo preço.",
+        "title": "To em duvida entre o {a} e o {b}: qual levo?",
+        "summary": "Dois produtos parecidos, precos diferentes. Olhamos de perto e contamos o que cada um entrega de verdade.",
     },
     {
-        "title": "{a} ou {b}? A escolha certa para voce",
-        "summary": "Dois produtos similares, perfis de uso diferentes. Veja qual combina com o seu dia a dia.",
+        "title": "{a} ou {b}? Veja qual faz mais sentido para voce",
+        "summary": "Nao e so o preco que conta: conforto, durabilidade e uso no dia a dia pesam tanto quanto o valor.",
     },
     {
-        "title": "Custo-beneficio: {a} contra {b}",
-        "summary": "Analisamos preco, qualidade e durabilidade para voce decidir com seguranca.",
+        "title": "{a} vs {b}: qual da mais valor ao seu dinheiro?",
+        "summary": "Olhamos os dois com cuidado: onde um vai melhor que o outro e para qual perfil cada um faz mais sentido.",
     },
 ]
 
@@ -290,9 +290,9 @@ def generate_comparisons(deals: list[dict]) -> list[dict]:
         product_a, product_b = items[0], items[1]
         template = COMPARISON_TEMPLATES[index % len(COMPARISON_TEMPLATES)]
         product_a_pros = (
-            ["Melhor preco do dia", "Produto selecionado"]
+            ["Boa opcao nessa faixa de preco", "Produto bem avaliado pelos compradores"]
             if product_a.get("discount_pct", 0) == 0
-            else ["Melhor preco do dia", f"{product_a['discount_pct']}% de desconto"]
+            else ["Melhor preco do dia", f"Economia de {product_a['discount_pct']}% em relacao ao preco cheio"]
         )
         comparisons.append(
             {
@@ -313,7 +313,7 @@ def generate_comparisons(deals: list[dict]) -> list[dict]:
                     "name": product_b["product_name"],
                     "price": f"R$ {product_b['deal_price']:.2f}".replace(".", ","),
                     "affiliate_url": product_b["affiliate_url"],
-                    "pros": ["Boa avaliacao", "Disponibilidade imediata"],
+                    "pros": ["Muito bem avaliado por quem ja comprou", "Boa alternativa para comparar antes de decidir"],
                 },
             }
         )
