@@ -1,4 +1,7 @@
-from fastapi import APIRouter, Depends, Query
+import os
+from typing import Optional
+
+from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from sqlalchemy import desc
 from sqlalchemy.orm import Session
 
@@ -6,10 +9,21 @@ from app.database import get_db
 from app.models import ScraperLog
 
 router = APIRouter(prefix="/admin", tags=["admin"])
+ADMIN_API_KEY = os.getenv("ADMIN_API_KEY", "")
+
+
+def verify_admin_key(x_api_key: Optional[str] = Header(default=None, alias="X-Api-Key")):
+    if not ADMIN_API_KEY or x_api_key != ADMIN_API_KEY:
+        raise HTTPException(status_code=401, detail="Nao autorizado")
+    return x_api_key
 
 
 @router.get("/scraper-logs")
-def get_scraper_logs(limit: int = Query(20), db: Session = Depends(get_db)):
+def get_scraper_logs(
+    limit: int = Query(20, ge=1, le=100),
+    db: Session = Depends(get_db),
+    _: str = Depends(verify_admin_key),
+):
     logs = (
         db.query(ScraperLog)
         .order_by(desc(ScraperLog.started_at))

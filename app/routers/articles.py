@@ -1,9 +1,10 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import desc
 from sqlalchemy.orm import Session, joinedload
 
 from app.database import get_db
 from app.models import Article, Category
+from app.rate_limit import limiter
 
 router = APIRouter(prefix="/articles", tags=["articles"])
 
@@ -61,7 +62,13 @@ def serialize_article(article: Article, full: bool = False):
 
 
 @router.get("/")
-def list_articles(category: str = Query(None), limit: int = Query(10), db: Session = Depends(get_db)):
+@limiter.limit("60/minute")
+def list_articles(
+    request: Request,
+    category: str = Query(None),
+    limit: int = Query(10, ge=1, le=100),
+    db: Session = Depends(get_db),
+):
     query = (
         db.query(Article)
         .options(joinedload(Article.category))
@@ -87,7 +94,8 @@ def get_featured(db: Session = Depends(get_db)):
 
 
 @router.get("/recent")
-def get_recent(limit: int = Query(5), db: Session = Depends(get_db)):
+@limiter.limit("60/minute")
+def get_recent(request: Request, limit: int = Query(5, ge=1, le=100), db: Session = Depends(get_db)):
     articles = (
         db.query(Article)
         .options(joinedload(Article.category))
@@ -100,7 +108,8 @@ def get_recent(limit: int = Query(5), db: Session = Depends(get_db)):
 
 
 @router.get("/{slug}")
-def get_article(slug: str, db: Session = Depends(get_db)):
+@limiter.limit("60/minute")
+def get_article(request: Request, slug: str, db: Session = Depends(get_db)):
     article = (
         db.query(Article)
         .options(joinedload(Article.category), joinedload(Article.sections), joinedload(Article.products))

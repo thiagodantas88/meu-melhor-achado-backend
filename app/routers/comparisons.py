@@ -1,11 +1,12 @@
 from datetime import date
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy import desc
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models import DailyComparison
+from app.rate_limit import limiter
 
 router = APIRouter(prefix="/comparisons", tags=["comparisons"])
 
@@ -37,7 +38,8 @@ def serialize_comparison(comparison: DailyComparison):
 
 
 @router.get("/today")
-def get_today(db: Session = Depends(get_db)):
+@limiter.limit("60/minute")
+def get_today(request: Request, db: Session = Depends(get_db)):
     today = date.today().strftime("%Y-%m-%d")
     items = (
         db.query(DailyComparison)
@@ -50,7 +52,8 @@ def get_today(db: Session = Depends(get_db)):
 
 
 @router.get("/")
-def list_comparisons(limit: int = Query(9), db: Session = Depends(get_db)):
+@limiter.limit("60/minute")
+def list_comparisons(request: Request, limit: int = Query(9, ge=1, le=100), db: Session = Depends(get_db)):
     items = (
         db.query(DailyComparison)
         .order_by(desc(DailyComparison.created_at))

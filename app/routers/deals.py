@@ -1,9 +1,10 @@
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy import desc
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models import Deal
+from app.rate_limit import limiter
 
 router = APIRouter(prefix="/deals", tags=["deals"])
 
@@ -23,7 +24,13 @@ def serialize_deal(deal: Deal):
 
 
 @router.get("/")
-def list_deals(category: str = Query(None), limit: int = Query(20), db: Session = Depends(get_db)):
+@limiter.limit("60/minute")
+def list_deals(
+    request: Request,
+    category: str = Query(None),
+    limit: int = Query(20, ge=1, le=100),
+    db: Session = Depends(get_db),
+):
     query = db.query(Deal).filter(Deal.is_active == True).order_by(desc(Deal.discount_pct))
     if category:
         query = query.filter(Deal.category == category)
