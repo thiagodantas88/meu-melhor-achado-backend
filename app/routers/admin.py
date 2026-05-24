@@ -2,12 +2,14 @@ import os
 from typing import Optional
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
+from sqlalchemy import text
 from sqlalchemy import desc
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models import ScraperLog
+from app.models import DailyComparison, ScraperLog
 from app.services.affiliate_links import resolve_product_search_links
+from app.services.scraper import run_daily_job
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 ADMIN_API_KEY = os.getenv("ADMIN_API_KEY", "")
@@ -57,3 +59,31 @@ def resolve_affiliate_links(
 ):
     updated = resolve_product_search_links(db, limit=limit)
     return {"updated": updated, "limit": limit}
+
+
+@router.get("/database-encoding")
+def get_database_encoding(
+    db: Session = Depends(get_db),
+    _: str = Depends(verify_admin_key),
+):
+    encoding = db.execute(text("SHOW SERVER_ENCODING")).scalar()
+    return {"serverEncoding": encoding}
+
+
+@router.post("/clear-comparisons")
+def clear_comparisons(
+    db: Session = Depends(get_db),
+    _: str = Depends(verify_admin_key),
+):
+    deleted = db.query(DailyComparison).delete()
+    db.commit()
+    return {"deleted": deleted}
+
+
+@router.post("/run-scraper")
+def run_scraper(
+    db: Session = Depends(get_db),
+    _: str = Depends(verify_admin_key),
+):
+    run_daily_job(db)
+    return {"status": "ok"}

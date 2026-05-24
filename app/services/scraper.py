@@ -1,9 +1,10 @@
+# -*- coding: utf-8 -*-
 """
-Robo diario do Meu Melhor Achado.
+Robô diário do Meu Melhor Achado.
 
 Busca ofertas na Amazon e no Magalu, salva deals ativos e gera comparativos
 simples para a API. O scraper falha de forma silenciosa por loja/termo para
-nao derrubar o backend caso uma pagina mude markup ou bloqueie a requisicao.
+não derrubar o backend caso uma página mude markup ou bloqueie a requisição.
 """
 
 import logging
@@ -51,15 +52,15 @@ SEARCH_TERMS = [
 
 COMPARISON_TEMPLATES = [
     {
-        "title": "To em duvida entre o {a} e o {b}: qual levo?",
-        "summary": "Dois produtos parecidos, precos diferentes. Olhamos de perto e contamos o que cada um entrega de verdade.",
+        "title": "Tô em dúvida entre o {a} e o {b} — qual levo?",
+        "summary": "Dois produtos parecidos, preços diferentes. Olhamos de perto e contamos o que cada um entrega de verdade.",
     },
     {
-        "title": "{a} ou {b}? Veja qual faz mais sentido para voce",
-        "summary": "Nao e so o preco que conta: conforto, durabilidade e uso no dia a dia pesam tanto quanto o valor.",
+        "title": "{a} ou {b}? Veja qual faz mais sentido para você",
+        "summary": "Não é só o preço que conta — conforto, durabilidade e uso no dia a dia pesam tanto quanto o valor. Compare os dois.",
     },
     {
-        "title": "{a} vs {b}: qual da mais valor ao seu dinheiro?",
+        "title": "{a} vs {b}: qual dá mais valor ao seu dinheiro?",
         "summary": "Olhamos os dois com cuidado: onde um vai melhor que o outro e para qual perfil cada um faz mais sentido.",
     },
 ]
@@ -71,6 +72,11 @@ def parse_price(text: str) -> Optional[float]:
         return float(cleaned)
     except Exception:
         return None
+
+
+def format_price(value: float) -> str:
+    """Formata float para padrão brasileiro: R$ 1.299,90."""
+    return f"R$ {value:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
 
 def normalize_image_url(candidate: Optional[str], base_url: str) -> Optional[str]:
@@ -297,9 +303,9 @@ def generate_comparisons(deals: list[dict]) -> list[dict]:
         product_a, product_b = items[0], items[1]
         template = COMPARISON_TEMPLATES[index % len(COMPARISON_TEMPLATES)]
         product_a_pros = (
-            ["Boa opcao nessa faixa de preco", "Produto bem avaliado pelos compradores"]
+            ["Boa opção nessa faixa de preço", "Produto bem avaliado pelos compradores"]
             if product_a.get("discount_pct", 0) == 0
-            else ["Melhor preco do dia", f"Economia de {product_a['discount_pct']}% em relacao ao preco cheio"]
+            else ["Melhor preço do dia", f"Economia de {product_a['discount_pct']}% em relação ao preço cheio"]
         )
         comparisons.append(
             {
@@ -312,15 +318,15 @@ def generate_comparisons(deals: list[dict]) -> list[dict]:
                 "category": category,
                 "product_a": {
                     "name": product_a["product_name"],
-                    "price": f"R$ {product_a['deal_price']:.2f}".replace(".", ","),
+                    "price": format_price(product_a["deal_price"]),
                     "affiliate_url": product_a["affiliate_url"],
                     "pros": product_a_pros,
                 },
                 "product_b": {
                     "name": product_b["product_name"],
-                    "price": f"R$ {product_b['deal_price']:.2f}".replace(".", ","),
+                    "price": format_price(product_b["deal_price"]),
                     "affiliate_url": product_b["affiliate_url"],
-                    "pros": ["Muito bem avaliado por quem ja comprou", "Boa alternativa para comparar antes de decidir"],
+                    "pros": ["Muito bem avaliado por quem já comprou", "Boa alternativa para comparar antes de decidir"],
                 },
             }
         )
