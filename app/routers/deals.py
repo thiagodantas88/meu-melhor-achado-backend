@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models import Deal
 from app.rate_limit import limiter
+from app.services.affiliate_links import is_product_affiliate_url
 
 router = APIRouter(prefix="/deals", tags=["deals"])
 
@@ -34,4 +35,6 @@ def list_deals(
     query = db.query(Deal).filter(Deal.is_active == True).order_by(desc(Deal.discount_pct))
     if category:
         query = query.filter(Deal.category == category)
-    return [serialize_deal(deal) for deal in query.limit(limit).all()]
+    deals = query.limit(limit * 3).all()
+    valid_deals = [deal for deal in deals if is_product_affiliate_url(deal.affiliate_url)]
+    return [serialize_deal(deal) for deal in valid_deals[:limit]]

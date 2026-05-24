@@ -13,6 +13,7 @@ from add_articles_v2 import NEW_ARTICLES_V2
 from app.database import SessionLocal
 from app.migrations import ensure_database_schema
 from app.models import Article, Category, ContentSection, Deal, Product
+from app.services.affiliate_links import is_search_affiliate_url, resolve_product_search_links
 
 CATEGORIES = [
     {
@@ -589,6 +590,41 @@ def _upsert_article(db, data, category_id):
     return article
 
 
+def _upsert_products(db, article, products):
+    existing_by_name = {product.name: product for product in article.products}
+    seen_ids = []
+
+    for product_data in products:
+        source = product_data.get("source", "amazon")
+        data = {**product_data, "store": source, "article_id": article.id}
+        product = existing_by_name.get(product_data["name"])
+
+        if product:
+            if (
+                is_search_affiliate_url(data.get("affiliate_url"))
+                and product.affiliate_url
+                and not is_search_affiliate_url(product.affiliate_url)
+            ):
+                data["affiliate_url"] = product.affiliate_url
+            if not data.get("image_url") and product.image_url:
+                data["image_url"] = product.image_url
+
+            for key, value in data.items():
+                setattr(product, key, value)
+        else:
+            product = Product(**data)
+            db.add(product)
+
+        db.flush()
+        seen_ids.append(product.id)
+
+    if seen_ids:
+        db.query(Product).filter(
+            Product.article_id == article.id,
+            Product.id.notin_(seen_ids),
+        ).delete(synchronize_session=False)
+
+
 def seed():
     ensure_database_schema()
     db = SessionLocal()
@@ -605,10 +641,7 @@ def seed():
             for section_data in article_data["sections"]:
                 db.add(ContentSection(**section_data, article_id=article.id))
 
-            db.query(Product).filter(Product.article_id == article.id).delete()
-            for product_data in article_data["products"]:
-                source = product_data.get("source", "amazon")
-                db.add(Product(**product_data, store=source, article_id=article.id))
+            _upsert_products(db, article, article_data["products"])
 
         db.flush()
         db.query(Deal).filter(Deal.affiliate_url.like("%amazon.com.br/s?%")).update(
@@ -621,6 +654,7 @@ def seed():
         )
 
         db.commit()
+        resolve_product_search_links(db)
         print(f"Seed concluido: {len(CATEGORIES)} categorias, {len(ARTICLES)} artigos")
     except Exception as exc:
         db.rollback()

@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session, joinedload
 from app.database import get_db
 from app.models import Article, Category
 from app.rate_limit import limiter
+from app.services.affiliate_links import safe_affiliate_url
 
 router = APIRouter(prefix="/articles", tags=["articles"])
 
@@ -49,7 +50,7 @@ def serialize_article(article: Article, full: bool = False):
                 "summary": product.summary,
                 "pros": product.pros or [],
                 "cons": product.cons or [],
-                "affiliateUrl": product.affiliate_url,
+                "affiliateUrl": safe_affiliate_url(product.affiliate_url),
                 "price": product.price,
                 "badge": product.badge,
                 "imageUrl": product.image_url,

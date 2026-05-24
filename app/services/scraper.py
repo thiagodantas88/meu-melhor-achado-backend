@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.models import DailyComparison, Deal, PriceHistory, Product, ScraperLog
+from app.services.affiliate_links import is_product_affiliate_url
 from app.services.notifier import send_run_report
 
 logger = logging.getLogger(__name__)
@@ -137,6 +138,9 @@ def build_fallback_deals_from_products(db: Session) -> list[dict]:
     fallback_deals = []
 
     for product in products:
+        if not is_product_affiliate_url(product.affiliate_url):
+            continue
+
         deal_price = parse_price(product.price or "")
         if not deal_price:
             continue
