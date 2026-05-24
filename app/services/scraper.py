@@ -45,6 +45,7 @@ SEARCH_TERMS = [
     ("carro", "suporte celular carro"),
     ("carro", "carregador veicular"),
     ("bebidas", "vinho"),
+    ("bebidas", "whisky"),
     ("bebidas", "cafe gourmet"),
     ("moda", "vestido feminino"),
     ("moda", "bolsa feminina"),
@@ -334,6 +335,63 @@ def generate_comparisons(deals: list[dict]) -> list[dict]:
     return comparisons
 
 
+def save_deals(db: Session, deals: list[dict], run_id: str) -> int:
+    saved = 0
+    for deal_data in deals:
+        existing = (
+            db.query(Deal)
+            .filter(Deal.affiliate_url == deal_data["affiliate_url"])
+            .first()
+        )
+        if existing:
+            for key, value in deal_data.items():
+                setattr(existing, key, value)
+            existing.is_active = True
+        else:
+            db.add(Deal(**deal_data, is_active=True))
+
+        db.add(
+            PriceHistory(
+                product_name=deal_data["product_name"],
+                price=deal_data["deal_price"],
+                source=deal_data["source"],
+                category=deal_data["category"],
+                affiliate_url=deal_data["affiliate_url"],
+                scraper_run=run_id,
+            )
+        )
+        saved += 1
+
+    db.commit()
+    return saved
+
+
+def run_category_terms(db: Session, category: str, terms: list[str]) -> dict:
+    run_id = datetime.now().strftime("%Y-%m-%d_%H:%M")
+    all_deals = []
+    amazon_total = 0
+    magalu_total = 0
+
+    for term in terms:
+        amazon_deals = fetch_amazon_deals(term, category)
+        magalu_deals = fetch_magalu_deals(term, category)
+        amazon_total += len(amazon_deals)
+        magalu_total += len(magalu_deals)
+        all_deals.extend(amazon_deals)
+        all_deals.extend(magalu_deals)
+        logger.info("Pontual %s/%s: %s Amazon + %s Magalu", category, term, len(amazon_deals), len(magalu_deals))
+
+    saved = save_deals(db, all_deals, run_id)
+    return {
+        "runId": run_id,
+        "category": category,
+        "terms": terms,
+        "amazonFound": amazon_total,
+        "magaluFound": magalu_total,
+        "dealsPublished": saved,
+    }
+
+
 def run_daily_job(db: Session):
     logger.info("Iniciando robo diario do Meu Melhor Achado")
     today = date.today().strftime("%Y-%m-%d")
@@ -374,23 +432,8 @@ def run_daily_job(db: Session):
             if fallback_count:
                 fallback_count = min(fallback_count, len(all_deals))
 
-        for deal_data in all_deals:
-            db.add(Deal(**deal_data, is_active=True))
-        db.commit()
+        save_deals(db, all_deals, run_id)
         logger.info("%s ofertas salvas", len(all_deals))
-
-        for deal_data in all_deals:
-            db.add(
-                PriceHistory(
-                    product_name=deal_data["product_name"],
-                    price=deal_data["deal_price"],
-                    source=deal_data["source"],
-                    category=deal_data["category"],
-                    affiliate_url=deal_data["affiliate_url"],
-                    scraper_run=run_id,
-                )
-            )
-        db.commit()
         logger.info("%s precos registrados no historico (run: %s)", len(all_deals), run_id)
 
         comparisons = generate_comparisons(all_deals)

@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models import DailyComparison, ScraperLog
 from app.services.affiliate_links import resolve_product_search_links
-from app.services.scraper import run_daily_job
+from app.services.scraper import run_category_terms, run_daily_job
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 ADMIN_API_KEY = os.getenv("ADMIN_API_KEY", "")
@@ -87,3 +87,14 @@ def run_scraper(
 ):
     run_daily_job(db)
     return {"status": "ok"}
+
+
+@router.post("/run-category-scraper")
+def run_category_scraper(
+    category: str = Query(..., min_length=2),
+    term: str = Query(..., min_length=2),
+    db: Session = Depends(get_db),
+    _: str = Depends(verify_admin_key),
+):
+    result = run_category_terms(db, category=category, terms=[term])
+    return {"status": "ok", **result}
