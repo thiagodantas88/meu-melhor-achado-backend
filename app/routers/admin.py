@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models import ScraperLog
+from app.services.affiliate_links import resolve_product_search_links
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 ADMIN_API_KEY = os.getenv("ADMIN_API_KEY", "")
@@ -46,3 +47,13 @@ def get_scraper_logs(
         }
         for log in logs
     ]
+
+
+@router.post("/resolve-affiliate-links")
+def resolve_affiliate_links(
+    limit: int = Query(25, ge=1, le=100),
+    db: Session = Depends(get_db),
+    _: str = Depends(verify_admin_key),
+):
+    updated = resolve_product_search_links(db, limit=limit)
+    return {"updated": updated, "limit": limit}

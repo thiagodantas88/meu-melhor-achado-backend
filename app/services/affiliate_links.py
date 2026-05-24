@@ -175,6 +175,10 @@ def resolve_product_search_links(db: Session, limit: int = 80) -> int:
     products = (
         db.query(Product)
         .filter(Product.affiliate_url.isnot(None))
+        .filter(
+            (Product.affiliate_url.like("%amazon.com.br/s?%"))
+            | (Product.affiliate_url.like("%/busca/%"))
+        )
         .limit(limit)
         .all()
     )
