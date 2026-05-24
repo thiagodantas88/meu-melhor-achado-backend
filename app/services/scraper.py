@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.models import DailyComparison, Deal, PriceHistory, Product, ScraperLog
+from app.services.notifier import send_run_report
 
 logger = logging.getLogger(__name__)
 
@@ -335,6 +336,7 @@ def run_daily_job(db: Session):
     amazon_total = 0
     magalu_total = 0
     fallback_count = 0
+    error_count = 0
 
     try:
         db.query(Deal).update({"is_active": False})
@@ -400,14 +402,24 @@ def run_daily_job(db: Session):
             scraper_log.deals_fallback = fallback_count
             scraper_log.amazon_found = amazon_total
             scraper_log.magalu_found = magalu_total
+            scraper_log.errors = error_count
             scraper_log.finished_at = datetime.now()
             scraper_log.status = "ok"
             db.commit()
+
+        send_run_report(
+            run_id=run_id,
+            deals=all_deals,
+            comparisons=comparisons,
+            errors=error_count,
+            fallback_count=fallback_count,
+        )
     except Exception as exc:
         db.rollback()
+        error_count = 1
         if scraper_log:
             scraper_log.finished_at = datetime.now()
-            scraper_log.errors = 1
+            scraper_log.errors = error_count
             scraper_log.status = "error"
             scraper_log.notes = str(exc)[:1000]
             db.commit()
