@@ -13,7 +13,7 @@ from add_articles_v2 import NEW_ARTICLES_V2
 from app.database import SessionLocal
 from app.migrations import ensure_database_schema
 from app.models import Article, Category, ContentSection, Deal, Product
-from app.services.affiliate_links import is_search_affiliate_url, resolve_product_search_links
+from app.services.affiliate_links import is_search_affiliate_url
 
 CATEGORIES = [
     {
@@ -654,7 +654,6 @@ def seed():
         )
 
         db.commit()
-        resolve_product_search_links(db)
         print(f"Seed concluido: {len(CATEGORIES)} categorias, {len(ARTICLES)} artigos")
     except Exception as exc:
         db.rollback()
