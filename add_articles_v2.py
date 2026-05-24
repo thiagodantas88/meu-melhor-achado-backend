@@ -25,7 +25,7 @@ NEW_ARTICLES_V2 = [
         "category_slug": "casa",
         "published_at": datetime(2026, 5, 24),
         "reading_time": 6,
-        "image_url": "https://images.unsplash.com/photo-1585515320310-259814833e62?w=800&q=80",
+        "image_url": "/articles/air-fryer-casal.svg",
         "sections": [
             {"type": "intro", "text": "Para casal, uma air fryer enorme nem sempre faz sentido. O ideal é equilibrar capacidade, potência e tamanho para preparar porções do dia a dia sem gastar energia à toa.", "order": 0},
             {"type": "criteria", "title": "O que observar", "items": ["Capacidade entre 3L e 4L atende bem duas pessoas", "Cesto antiaderente facilita a limpeza", "Potência acima de 1400W ajuda a dourar melhor", "Tamanho externo importa para cozinhas pequenas"], "order": 1},
@@ -44,7 +44,7 @@ NEW_ARTICLES_V2 = [
         "category_slug": "casa",
         "published_at": datetime(2026, 5, 24),
         "reading_time": 6,
-        "image_url": "https://images.unsplash.com/photo-1556909114-f6e7ad7d3136?w=800&q=80",
+        "image_url": "/articles/jogo-panelas-antiaderente.svg",
         "sections": [
             {"type": "intro", "text": "Panelas antiaderentes são ótimas para a rotina, mas variam muito em espessura, revestimento e durabilidade. Comprar só pela quantidade de peças pode sair caro.", "order": 0},
             {"type": "criteria", "title": "Critérios de escolha", "items": ["Fundo mais grosso distribui melhor o calor", "Cabos firmes aumentam segurança", "Tampas de vidro ajudam no controle do preparo", "Compatibilidade com fogão por indução pode ser decisiva"], "order": 1},
@@ -63,7 +63,7 @@ NEW_ARTICLES_V2 = [
         "category_slug": "moda",
         "published_at": datetime(2026, 5, 24),
         "reading_time": 5,
-        "image_url": "https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=800&q=80",
+        "image_url": "/articles/tenis-branco-feminino.svg",
         "sections": [
             {"type": "intro", "text": "O tênis branco feminino virou peça coringa: vai com jeans, vestido, alfaiataria leve e looks de viagem. O segredo é escolher um modelo confortável e fácil de limpar.", "order": 0},
             {"type": "criteria", "title": "Antes de comprar", "items": ["Palmilha macia faz diferença no uso prolongado", "Solado antiderrapante ajuda na rotina", "Material sintético costuma limpar mais fácil", "Forma pode variar muito por marca"], "order": 1},
@@ -82,7 +82,7 @@ NEW_ARTICLES_V2 = [
         "category_slug": "moda",
         "published_at": datetime(2026, 5, 24),
         "reading_time": 5,
-        "image_url": "https://images.unsplash.com/photo-1590874103328-eac38a683ce7?w=800&q=80",
+        "image_url": "/articles/bolsa-feminina-trabalho.svg",
         "sections": [
             {"type": "intro", "text": "A bolsa ideal para trabalho precisa caber na rotina: celular, carteira, nécessaire, documentos e, em alguns casos, notebook. Beleza sozinha não resolve.", "order": 0},
             {"type": "criteria", "title": "O que importa", "items": ["Alça reforçada aumenta durabilidade", "Divisórias ajudam na organização", "Cores neutras combinam com mais looks", "Tamanho precisa acompanhar sua rotina real"], "order": 1},
@@ -101,7 +101,7 @@ NEW_ARTICLES_V2 = [
         "category_slug": "home-office",
         "published_at": datetime(2026, 5, 24),
         "reading_time": 7,
-        "image_url": "https://images.unsplash.com/photo-1586023492125-27b2c045efd7?w=800&q=80",
+        "image_url": "/articles/cadeira-escritorio-costas.svg",
         "sections": [
             {"type": "intro", "text": "Dor nas costas no home office costuma vir de postura ruim, cadeira sem apoio e muitas horas sem pausa. Uma boa cadeira não faz milagre, mas muda bastante a rotina.", "order": 0},
             {"type": "criteria", "title": "Pontos essenciais", "items": ["Apoio lombar ajustável é prioridade", "Altura regulável ajuda a alinhar braços e mesa", "Assento com boa espuma evita desconforto", "Encosto respirável ajuda em dias quentes"], "order": 1},
@@ -120,7 +120,7 @@ NEW_ARTICLES_V2 = [
         "category_slug": "home-office",
         "published_at": datetime(2026, 5, 24),
         "reading_time": 4,
-        "image_url": "https://images.unsplash.com/photo-1497366754035-f200968a6e72?w=800&q=80",
+        "image_url": "/articles/suporte-notebook-home-office.svg",
         "sections": [
             {"type": "intro", "text": "Notebook baixo força o pescoço e esquenta mais. Um suporte ajusta a altura da tela e deixa o setup mais confortável, principalmente com teclado e mouse externos.", "order": 0},
             {"type": "criteria", "title": "Como escolher", "items": ["Altura ajustável ajuda a alinhar a tela aos olhos", "Base vazada melhora ventilação", "Material em alumínio tende a ser mais firme", "Modelos dobráveis são melhores para viagem"], "order": 1},
@@ -139,7 +139,7 @@ NEW_ARTICLES_V2 = [
         "category_slug": "tecnologia",
         "published_at": datetime(2026, 5, 24),
         "reading_time": 5,
-        "image_url": "https://images.unsplash.com/photo-1587825140708-dfaf72ae4b04?w=800&q=80",
+        "image_url": "/articles/webcam-reuniao-online.svg",
         "sections": [
             {"type": "intro", "text": "A webcam do notebook nem sempre dá conta. Para reuniões, aulas e entrevistas, uma câmera externa pode melhorar nitidez, luz e enquadramento.", "order": 0},
             {"type": "criteria", "title": "O que observar", "items": ["Full HD já é suficiente para a maioria", "Microfone embutido quebra galho, mas headset ainda é melhor", "Correção de luz ajuda em ambientes escuros", "Tampa de privacidade é um extra útil"], "order": 1},
@@ -158,7 +158,7 @@ NEW_ARTICLES_V2 = [
         "category_slug": "tecnologia",
         "published_at": datetime(2026, 5, 24),
         "reading_time": 5,
-        "image_url": "https://images.unsplash.com/photo-1527814050087-3793815479db?w=800&q=80",
+        "image_url": "/articles/mouse-sem-fio-trabalho.svg",
         "sections": [
             {"type": "intro", "text": "Um mouse ruim incomoda mais do que parece. Para trabalhar o dia todo, conforto e conexão estável importam mais do que luzes ou muitos botões.", "order": 0},
             {"type": "criteria", "title": "O que vale priorizar", "items": ["Formato confortável para sua mão", "Conexão Bluetooth ou receptor USB estável", "Boa autonomia de bateria", "Cliques silenciosos podem ajudar em ambientes compartilhados"], "order": 1},
@@ -177,7 +177,7 @@ NEW_ARTICLES_V2 = [
         "category_slug": "bebidas",
         "published_at": datetime(2026, 5, 24),
         "reading_time": 5,
-        "image_url": "https://images.unsplash.com/photo-1510812431401-41d2bd2722f3?w=800&q=80",
+        "image_url": "/articles/vinho-presente-ate-100.svg",
         "sections": [
             {"type": "intro", "text": "Vinho para presente precisa equilibrar apresentação, sabor fácil de agradar e preço honesto. Até R$ 100, dá para escolher bem sem parecer improviso.", "order": 0},
             {"type": "criteria", "title": "Como não errar", "items": ["Rótulos conhecidos reduzem risco", "Tintos suaves ou meio secos agradam mais gente", "Espumante é bom para celebrações", "Embalagem e conservação também contam"], "order": 1},
@@ -196,7 +196,7 @@ NEW_ARTICLES_V2 = [
         "category_slug": "carro",
         "published_at": datetime(2026, 5, 24),
         "reading_time": 5,
-        "image_url": "https://images.unsplash.com/photo-1503376780353-7e6692767b70?w=800&q=80",
+        "image_url": "/articles/suporte-celular-carro-firme.svg",
         "sections": [
             {"type": "intro", "text": "Um suporte que cai no meio do trajeto atrapalha e pode ser perigoso. Para usar GPS, a fixação precisa ser firme e o celular deve ficar fácil de visualizar.", "order": 0},
             {"type": "criteria", "title": "O que faz diferença", "items": ["Ventosa forte funciona bem no para-brisa e painel liso", "Fixação na saída de ar é prática, mas depende do carro", "Ímã precisa ser forte e bem posicionado", "Braço ajustável melhora o ângulo de visão"], "order": 1},
@@ -215,12 +215,18 @@ def add_articles() -> None:
     db = SessionLocal()
     try:
         added = 0
+        updated = 0
         skipped = 0
         for article_data in NEW_ARTICLES_V2:
             existing = db.query(Article).filter(Article.slug == article_data["slug"]).first()
             if existing:
-                print(f"Ja existe: {article_data['slug']}")
-                skipped += 1
+                if existing.image_url != article_data["image_url"]:
+                    existing.image_url = article_data["image_url"]
+                    print(f"Imagem atualizada: {article_data['slug']}")
+                    updated += 1
+                else:
+                    print(f"Ja existe: {article_data['slug']}")
+                    skipped += 1
                 continue
 
             category = db.query(Category).filter(Category.slug == article_data["category_slug"]).first()
@@ -248,7 +254,7 @@ def add_articles() -> None:
             added += 1
 
         db.commit()
-        print(f"Concluido: {added} adicionados, {skipped} ignorados")
+        print(f"Concluido: {added} adicionados, {updated} atualizados, {skipped} ignorados")
     except Exception:
         db.rollback()
         raise
