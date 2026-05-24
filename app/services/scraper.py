@@ -189,15 +189,18 @@ def fetch_amazon_deals(term: str, category: str) -> list[dict]:
             link_el = item.select_one("h2 a")
             img_el = item.select_one("img.s-image")
 
-            if not (name_el and price_el and link_el):
+            if not (name_el and price_el):
                 continue
 
             new_price = parse_price(price_el.get_text())
             old_price = parse_price(old_el.get_text()) if old_el else None
-            href = link_el.get("href", "")
-            asin_match = re.search(r"/dp/([A-Z0-9]{10})", href)
+            href = link_el.get("href", "") if link_el else ""
+            asin = item.get("data-asin") or ""
+            asin_match = re.search(r"/dp/([A-Z0-9]{10})", href) if href else None
 
-            if not new_price or not asin_match:
+            if not asin and asin_match:
+                asin = asin_match.group(1)
+            if not new_price or not asin:
                 continue
 
             discount_pct = 0
@@ -205,7 +208,6 @@ def fetch_amazon_deals(term: str, category: str) -> list[dict]:
                 discount_pct = int(((old_price - new_price) / old_price) * 100)
 
             if discount_pct >= 15 or (discount_pct == 0 and new_price < 300):
-                asin = asin_match.group(1)
                 results.append(
                     {
                         "product_name": name_el.get_text(strip=True)[:290],

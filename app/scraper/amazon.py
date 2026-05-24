@@ -77,7 +77,9 @@ async def search_amazon(query: str, max_results: int = 3) -> List[ScrapedProduct
                 # URL
                 link_el = item.select_one("h2 a")
                 product_url = ""
-                if link_el and link_el.get("href"):
+                if asin:
+                    product_url = build_affiliate_url(f"https://www.amazon.com.br/dp/{asin}")
+                elif link_el and link_el.get("href"):
                     href = link_el["href"]
                     if href.startswith("/"):
                         href = f"https://www.amazon.com.br{href}"

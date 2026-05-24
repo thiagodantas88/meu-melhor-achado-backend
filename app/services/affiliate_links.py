@@ -145,13 +145,13 @@ def resolve_amazon_product(query: str) -> Optional[dict]:
     for item in items[:10]:
         title_el = item.select_one("h2 span")
         link_el = item.select_one("h2 a")
-        if not (title_el and link_el):
+        if not title_el:
             continue
 
         title = title_el.get_text(strip=True)
         asin = item.get("data-asin") or ""
-        href = link_el.get("href", "")
-        asin_match = re.search(r"/(?:dp|gp/product)/([A-Z0-9]{10})", href)
+        href = link_el.get("href", "") if link_el else ""
+        asin_match = re.search(r"/(?:dp|gp/product)/([A-Z0-9]{10})", href) if href else None
         if not asin and asin_match:
             asin = asin_match.group(1)
         if not asin or not looks_relevant(query, title):
