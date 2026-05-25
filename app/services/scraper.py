@@ -46,6 +46,8 @@ SEARCH_TERMS = [
     ("tecnologia", "cabo usb-c"),
     ("tecnologia", "power bank"),
     ("casa", "air fryer"),
+    ("casa", "air fryer mondial"),
+    ("casa", "air fryer electrolux"),
     ("casa", "aspirador de po"),
     ("home-office", "mouse sem fio"),
     ("home-office", "teclado mecanico"),
@@ -54,6 +56,8 @@ SEARCH_TERMS = [
     ("bebidas", "vinho"),
     ("bebidas", "whisky"),
     ("bebidas", "cafe gourmet"),
+    ("bebidas", "capsulas tres coracoes"),
+    ("bebidas", "capsula cafe tres coracoes"),
     ("moda", "vestido feminino"),
     ("moda", "bolsa feminina"),
 ]
