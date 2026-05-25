@@ -1,4 +1,11 @@
 # -*- coding: utf-8 -*-
+import sys
+
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8")
+
 """
 Robô diário do Meu Melhor Achado.
 
@@ -53,15 +60,15 @@ SEARCH_TERMS = [
 
 COMPARISON_TEMPLATES = [
     {
-        "title": "Tô em dúvida entre o {a} e o {b} — qual levo?",
-        "summary": "Dois produtos parecidos, preços diferentes. Olhamos de perto e contamos o que cada um entrega de verdade.",
+        "title": "T\u00f4 em d\u00favida entre o {a} e o {b} \u2014 qual levo?",
+        "summary": "Dois produtos parecidos, pre\u00e7os diferentes. Olhamos de perto e contamos o que cada um entrega de verdade.",
     },
     {
-        "title": "{a} ou {b}? Veja qual faz mais sentido para você",
-        "summary": "Não é só o preço que conta — conforto, durabilidade e uso no dia a dia pesam tanto quanto o valor. Compare os dois.",
+        "title": "{a} ou {b}? Veja qual faz mais sentido para voc\u00ea",
+        "summary": "N\u00e3o \u00e9 s\u00f3 o pre\u00e7o que conta \u2014 conforto, durabilidade e uso no dia a dia pesam tanto quanto o valor.",
     },
     {
-        "title": "{a} vs {b}: qual dá mais valor ao seu dinheiro?",
+        "title": "{a} vs {b}: qual d\u00e1 mais valor ao seu dinheiro?",
         "summary": "Olhamos os dois com cuidado: onde um vai melhor que o outro e para qual perfil cada um faz mais sentido.",
     },
 ]
@@ -304,9 +311,9 @@ def generate_comparisons(deals: list[dict]) -> list[dict]:
         product_a, product_b = items[0], items[1]
         template = COMPARISON_TEMPLATES[index % len(COMPARISON_TEMPLATES)]
         product_a_pros = (
-            ["Boa opção nessa faixa de preço", "Produto bem avaliado pelos compradores"]
+            ["Boa op\u00e7\u00e3o nessa faixa de pre\u00e7o", "Produto bem avaliado pelos compradores"]
             if product_a.get("discount_pct", 0) == 0
-            else ["Melhor preço do dia", f"Economia de {product_a['discount_pct']}% em relação ao preço cheio"]
+            else ["Melhor pre\u00e7o do dia", f"Economia de {product_a['discount_pct']}% em rela\u00e7\u00e3o ao pre\u00e7o cheio"]
         )
         comparisons.append(
             {
@@ -327,7 +334,7 @@ def generate_comparisons(deals: list[dict]) -> list[dict]:
                     "name": product_b["product_name"],
                     "price": format_price(product_b["deal_price"]),
                     "affiliate_url": product_b["affiliate_url"],
-                    "pros": ["Muito bem avaliado por quem já comprou", "Boa alternativa para comparar antes de decidir"],
+                    "pros": ["Muito bem avaliado por quem j\u00e1 comprou", "Boa alternativa para comparar antes de decidir"],
                 },
             }
         )
