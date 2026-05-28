@@ -84,6 +84,8 @@ CATEGORY_ORDER = [
     "moda",
 ]
 
+MAGALU_CAPTCHA_TERMS: set[str] = set()
+
 COMPARISON_TEMPLATES = [
     {
         "title": "T\u00f4 em d\u00favida entre o {a} e o {b} \u2014 qual levo?",
@@ -250,7 +252,7 @@ def fetch_amazon_deals(term: str, category: str) -> list[dict]:
         with httpx.Client(headers=HEADERS, timeout=15, follow_redirects=True) as client:
             response = client.get(url)
         if response.status_code != 200:
-            logger.warning("Magalu [%s] retornou status %s em %s", term, response.status_code, url)
+            logger.warning("Amazon [%s] retornou status %s em %s", term, response.status_code, url)
             return results
 
         soup = BeautifulSoup(response.text, "html.parser")
@@ -310,6 +312,12 @@ def fetch_magalu_deals(term: str, category: str) -> list[dict]:
         with httpx.Client(headers=HEADERS, timeout=15, follow_redirects=True) as client:
             response = client.get(url)
         if response.status_code != 200:
+            logger.warning("Magalu [%s] retornou status %s em %s", term, response.status_code, url)
+            return results
+
+        if "Captcha Magalu" in response.text:
+            MAGALU_CAPTCHA_TERMS.add(term)
+            logger.warning("Magalu [%s] retornou captcha; fonte ignorada nesta rodada", term)
             return results
 
         soup = BeautifulSoup(response.text, "html.parser")
@@ -369,8 +377,7 @@ def fetch_magalu_deals(term: str, category: str) -> list[dict]:
 
             return results
 
-        html_sample = re.sub(r"\s+", " ", response.text[:600]).strip()
-        logger.info("Magalu [%s] sem __NEXT_DATA__; usando fallback HTML. sample=%s", term, html_sample)
+        logger.info("Magalu [%s] sem __NEXT_DATA__; usando fallback HTML", term)
         items = soup.select("li[data-testid='product-card']")
 
         for item in items[:6]:
@@ -544,6 +551,7 @@ def run_category_terms(db: Session, category: str, terms: list[str]) -> dict:
     all_deals = []
     amazon_total = 0
     magalu_total = 0
+    MAGALU_CAPTCHA_TERMS.clear()
 
     for term in terms:
         amazon_deals = fetch_amazon_deals(term, category)
@@ -570,6 +578,7 @@ def run_daily_job(db: Session):
     today = date.today().strftime("%Y-%m-%d")
     run_id = datetime.now().strftime("%Y-%m-%d_%H:%M")
     scraper_log = None
+    MAGALU_CAPTCHA_TERMS.clear()
 
     if settings.LOG_SCRAPER_RUNS:
         scraper_log = ScraperLog(run_id=run_id, status="running")
@@ -625,12 +634,17 @@ def run_daily_job(db: Session):
         logger.info("%s comparativos gerados para %s", len(comparisons), today)
 
         if scraper_log:
+            notes = None
+            if MAGALU_CAPTCHA_TERMS:
+                notes = f"Magalu retornou captcha em {len(MAGALU_CAPTCHA_TERMS)} termos; fonte ignorada nesta rodada."
+
             scraper_log.deals_found = len(all_deals)
             scraper_log.deals_published = len(all_deals)
             scraper_log.deals_fallback = fallback_count
             scraper_log.amazon_found = amazon_total
             scraper_log.magalu_found = magalu_total
             scraper_log.errors = error_count
+            scraper_log.notes = notes
             scraper_log.finished_at = datetime.now()
             scraper_log.status = "ok"
             db.commit()
