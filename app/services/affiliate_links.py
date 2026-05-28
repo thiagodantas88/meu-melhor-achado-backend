@@ -124,6 +124,33 @@ def normalize_image_url(candidate: Optional[str], base_url: str) -> Optional[str
     return urljoin(base_url, image_url)
 
 
+def is_descriptive_product_name(name: str) -> bool:
+    normalized = re.sub(r"\s+", " ", name).strip().lower()
+    if normalized in {"genérico", "generico", "hbd"}:
+        return False
+    if len(normalized) < 12:
+        return False
+    return len(re.findall(r"[a-z0-9]+", normalized)) >= 2
+
+
+def extract_amazon_product_name(item) -> Optional[str]:
+    for selector in [
+        "a.a-text-normal h2 span",
+        "a.a-text-normal span",
+        "h2.a-text-normal span",
+        "h2 span",
+    ]:
+        element = item.select_one(selector)
+        if not element:
+            continue
+
+        name = element.get_text(" ", strip=True)
+        if is_descriptive_product_name(name):
+            return name
+
+    return None
+
+
 def resolve_amazon_product(query: str) -> Optional[dict]:
     from app.config import settings
 
@@ -143,12 +170,11 @@ def resolve_amazon_product(query: str) -> Optional[dict]:
     items = soup.select("div[data-component-type='s-search-result']")
 
     for item in items[:10]:
-        title_el = item.select_one("h2 span")
-        link_el = item.select_one("h2 a")
-        if not title_el:
+        title = extract_amazon_product_name(item)
+        link_el = item.select_one("a.a-text-normal[href]") or item.select_one("h2 a")
+        if not title:
             continue
 
-        title = title_el.get_text(strip=True)
         asin = item.get("data-asin") or ""
         href = link_el.get("href", "") if link_el else ""
         asin_match = re.search(r"/(?:dp|gp/product)/([A-Z0-9]{10})", href) if href else None

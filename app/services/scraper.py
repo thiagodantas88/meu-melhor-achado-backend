@@ -59,7 +59,12 @@ SEARCH_TERMS = [
     ("bebidas", "capsulas tres coracoes"),
     ("bebidas", "capsula cafe tres coracoes"),
     ("moda", "vestido feminino"),
+    ("moda", "vestido midi feminino"),
     ("moda", "bolsa feminina"),
+    ("moda", "bolsa feminina transversal"),
+    ("moda", "tenis feminino casual"),
+    ("moda", "calca jeans feminina"),
+    ("moda", "blusa feminina"),
 ]
 
 CATEGORY_ORDER = [
@@ -109,6 +114,33 @@ def normalize_image_url(candidate: Optional[str], base_url: str) -> Optional[str
         return None
 
     return urljoin(base_url, image_url)
+
+
+def is_descriptive_product_name(name: str) -> bool:
+    normalized = re.sub(r"\s+", " ", name).strip().lower()
+    if normalized in {"genérico", "generico", "hbd"}:
+        return False
+    if len(normalized) < 12:
+        return False
+    return len(re.findall(r"[a-z0-9]+", normalized)) >= 2
+
+
+def extract_amazon_product_name(item) -> Optional[str]:
+    for selector in [
+        "a.a-text-normal h2 span",
+        "a.a-text-normal span",
+        "h2.a-text-normal span",
+        "h2 span",
+    ]:
+        element = item.select_one(selector)
+        if not element:
+            continue
+
+        name = element.get_text(" ", strip=True)
+        if is_descriptive_product_name(name):
+            return name[:290]
+
+    return None
 
 
 def extract_image_from_affiliate_link(url: Optional[str]) -> Optional[str]:
@@ -210,13 +242,13 @@ def fetch_amazon_deals(term: str, category: str) -> list[dict]:
         items = soup.select("div[data-component-type='s-search-result']")
 
         for item in items[:8]:
-            name_el = item.select_one("h2 span")
             price_el = item.select_one("span.a-price > span.a-offscreen")
             old_el = item.select_one("span.a-price.a-text-price > span.a-offscreen")
-            link_el = item.select_one("h2 a")
+            link_el = item.select_one("a.a-text-normal[href]") or item.select_one("h2 a")
             img_el = item.select_one("img.s-image")
+            product_name = extract_amazon_product_name(item)
 
-            if not (name_el and price_el):
+            if not (product_name and price_el):
                 continue
 
             new_price = parse_price(price_el.get_text())
@@ -237,7 +269,7 @@ def fetch_amazon_deals(term: str, category: str) -> list[dict]:
             if discount_pct >= 15 or (discount_pct == 0 and new_price < 300):
                 results.append(
                     {
-                        "product_name": name_el.get_text(strip=True)[:290],
+                        "product_name": product_name,
                         "original_price": old_price or new_price,
                         "deal_price": new_price,
                         "discount_pct": discount_pct,
