@@ -369,7 +369,8 @@ def fetch_magalu_deals(term: str, category: str) -> list[dict]:
 
             return results
 
-        logger.info("Magalu [%s] sem __NEXT_DATA__; usando fallback HTML", term)
+        html_sample = re.sub(r"\s+", " ", response.text[:600]).strip()
+        logger.info("Magalu [%s] sem __NEXT_DATA__; usando fallback HTML. sample=%s", term, html_sample)
         items = soup.select("li[data-testid='product-card']")
 
         for item in items[:6]:
