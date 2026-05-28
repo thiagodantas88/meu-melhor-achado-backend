@@ -62,6 +62,15 @@ SEARCH_TERMS = [
     ("moda", "bolsa feminina"),
 ]
 
+CATEGORY_ORDER = [
+    "tecnologia",
+    "casa",
+    "carro",
+    "home-office",
+    "bebidas",
+    "moda",
+]
+
 COMPARISON_TEMPLATES = [
     {
         "title": "T\u00f4 em d\u00favida entre o {a} e o {b} \u2014 qual levo?",
@@ -346,6 +355,54 @@ def generate_comparisons(deals: list[dict]) -> list[dict]:
     return comparisons
 
 
+def select_balanced_deals(deals: list[dict], max_deals: int) -> list[dict]:
+    if max_deals <= 0 or len(deals) <= max_deals:
+        return deals
+
+    by_category: dict[str, list[dict]] = {}
+    seen_urls = set()
+    for deal in deals:
+        affiliate_url = deal.get("affiliate_url")
+        if affiliate_url in seen_urls:
+            continue
+        seen_urls.add(affiliate_url)
+        by_category.setdefault(deal["category"], []).append(deal)
+
+    for items in by_category.values():
+        items.sort(
+            key=lambda item: (
+                item.get("discount_pct") or 0,
+                -(item.get("deal_price") or 0),
+            ),
+            reverse=True,
+        )
+
+    categories = [category for category in CATEGORY_ORDER if by_category.get(category)]
+    categories.extend(
+        category
+        for category in by_category
+        if category not in categories
+    )
+
+    selected = []
+    while len(selected) < max_deals and categories:
+        next_categories = []
+        for category in categories:
+            items = by_category.get(category) or []
+            if not items:
+                continue
+
+            selected.append(items.pop(0))
+            if items:
+                next_categories.append(category)
+            if len(selected) >= max_deals:
+                break
+
+        categories = next_categories
+
+    return selected
+
+
 def save_deals(db: Session, deals: list[dict], run_id: str) -> int:
     saved = 0
     for deal_data in deals:
@@ -439,7 +496,7 @@ def run_daily_job(db: Session):
             fallback_count = len(all_deals)
 
         if settings.SCRAPER_MAX_DEALS_PER_RUN > 0:
-            all_deals = all_deals[: settings.SCRAPER_MAX_DEALS_PER_RUN]
+            all_deals = select_balanced_deals(all_deals, settings.SCRAPER_MAX_DEALS_PER_RUN)
             if fallback_count:
                 fallback_count = min(fallback_count, len(all_deals))
 
