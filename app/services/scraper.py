@@ -38,7 +38,14 @@ HEADERS = {
         "AppleWebKit/537.36 (KHTML, like Gecko) "
         "Chrome/124.0.0.0 Safari/537.36"
     ),
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
     "Accept-Language": "pt-BR,pt;q=0.9",
+    "Cache-Control": "no-cache",
+    "Pragma": "no-cache",
+    "Sec-Fetch-Dest": "document",
+    "Sec-Fetch-Mode": "navigate",
+    "Sec-Fetch-Site": "none",
+    "Upgrade-Insecure-Requests": "1",
 }
 
 SEARCH_TERMS = [
@@ -243,6 +250,7 @@ def fetch_amazon_deals(term: str, category: str) -> list[dict]:
         with httpx.Client(headers=HEADERS, timeout=15, follow_redirects=True) as client:
             response = client.get(url)
         if response.status_code != 200:
+            logger.warning("Magalu [%s] retornou status %s em %s", term, response.status_code, url)
             return results
 
         soup = BeautifulSoup(response.text, "html.parser")
@@ -356,8 +364,12 @@ def fetch_magalu_deals(term: str, category: str) -> list[dict]:
                     }
                 )
 
+            if not results:
+                logger.info("Magalu [%s] sem ofertas validas nos dados estruturados", term)
+
             return results
 
+        logger.info("Magalu [%s] sem __NEXT_DATA__; usando fallback HTML", term)
         items = soup.select("li[data-testid='product-card']")
 
         for item in items[:6]:
