@@ -1,18 +1,26 @@
 import os
-from typing import Optional
+from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
+from pydantic import BaseModel
 from sqlalchemy import text
 from sqlalchemy import desc
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models import DailyComparison, ScraperLog
+from app.models import DailyComparison, PriceHistory, ScraperLog
 from app.services.affiliate_links import resolve_product_search_links
-from app.services.scraper import run_category_terms, run_daily_job
+from app.services.scraper import SEARCH_TERMS, run_category_terms, run_daily_job
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 ADMIN_API_KEY = os.getenv("ADMIN_API_KEY", "")
+
+
+class ManualScraperRequest(BaseModel):
+    mode: Literal["general", "category", "product", "reference"] = "general"
+    category: Optional[str] = None
+    term: Optional[str] = None
 
 
 def verify_admin_key(x_api_key: Optional[str] = Header(default=None, alias="X-Api-Key")):
@@ -48,6 +56,39 @@ def get_scraper_logs(
             "notes": log.notes,
         }
         for log in logs
+    ]
+
+
+@router.get("/offers-history")
+def get_offers_history(
+    date: Optional[str] = Query(None, pattern=r"^\d{4}-\d{2}-\d{2}$"),
+    category: Optional[str] = Query(None),
+    source: Optional[str] = Query(None),
+    limit: int = Query(200, ge=1, le=1000),
+    db: Session = Depends(get_db),
+    _: str = Depends(verify_admin_key),
+):
+    query = db.query(PriceHistory)
+    if date:
+        query = query.filter(func.date(PriceHistory.recorded_at) == date)
+    if category:
+        query = query.filter(PriceHistory.category == category)
+    if source:
+        query = query.filter(PriceHistory.source == source)
+
+    rows = query.order_by(desc(PriceHistory.recorded_at)).limit(limit).all()
+    return [
+        {
+            "id": row.id,
+            "productName": row.product_name,
+            "price": row.price,
+            "source": row.source,
+            "category": row.category,
+            "affiliateUrl": row.affiliate_url,
+            "recordedAt": row.recorded_at.isoformat() if row.recorded_at else None,
+            "scraperRun": row.scraper_run,
+        }
+        for row in rows
     ]
 
 
@@ -87,6 +128,37 @@ def run_scraper(
 ):
     run_daily_job(db)
     return {"status": "ok"}
+
+
+@router.post("/run-manual")
+def run_manual_scraper(
+    payload: ManualScraperRequest,
+    db: Session = Depends(get_db),
+    _: str = Depends(verify_admin_key),
+):
+    if payload.mode == "general":
+        run_daily_job(db)
+        return {"status": "ok", "mode": payload.mode}
+
+    if payload.mode == "category":
+        if not payload.category:
+            raise HTTPException(status_code=400, detail="Categoria obrigatoria")
+
+        terms = [term for category, term in SEARCH_TERMS if category == payload.category]
+        if not terms:
+            raise HTTPException(status_code=404, detail="Categoria sem termos cadastrados")
+
+        result = run_category_terms(db, category=payload.category, terms=terms)
+        return {"status": "ok", "mode": payload.mode, **result}
+
+    if payload.mode in {"product", "reference"}:
+        if not payload.category or not payload.term:
+            raise HTTPException(status_code=400, detail="Categoria e termo sao obrigatorios")
+
+        result = run_category_terms(db, category=payload.category, terms=[payload.term])
+        return {"status": "ok", "mode": payload.mode, **result}
+
+    raise HTTPException(status_code=400, detail="Modo invalido")
 
 
 @router.post("/run-category-scraper")
