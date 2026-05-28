@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+import json
 import sys
 
 if hasattr(sys.stdout, "reconfigure"):
@@ -94,7 +95,13 @@ COMPARISON_TEMPLATES = [
 
 def parse_price(text: str) -> Optional[float]:
     try:
-        cleaned = re.sub(r"[^\d,]", "", text).replace(",", ".")
+        cleaned = re.sub(r"[^\d,.]", "", str(text or "").strip())
+        if not cleaned:
+            return None
+
+        if "," in cleaned:
+            cleaned = cleaned.replace(".", "").replace(",", ".")
+
         return float(cleaned)
     except Exception:
         return None
@@ -298,6 +305,59 @@ def fetch_magalu_deals(term: str, category: str) -> list[dict]:
             return results
 
         soup = BeautifulSoup(response.text, "html.parser")
+        next_data = soup.find("script", id="__NEXT_DATA__")
+        if next_data and next_data.string:
+            payload = json.loads(next_data.string)
+            products = (
+                payload.get("props", {})
+                .get("pageProps", {})
+                .get("data", {})
+                .get("search", {})
+                .get("products", [])
+            )
+
+            for product in products[:12]:
+                name = (product.get("title") or "").strip()
+                price = product.get("price") or {}
+                deal_price = parse_price(str(price.get("bestPrice") or price.get("fullPrice") or price.get("price") or ""))
+                original_price = parse_price(str(price.get("price") or price.get("fullPrice") or ""))
+                path = product.get("url") or product.get("path") or ""
+
+                if not (is_descriptive_product_name(name) and deal_price and path):
+                    continue
+
+                discount_pct = 0
+                seller_tags = product.get("seller", {}).get("tags") or []
+                for tag in seller_tags:
+                    if tag.get("type") == "base_price" and tag.get("discountValue"):
+                        discount_pct = int(float(tag["discountValue"]))
+                        break
+
+                if not discount_pct and original_price and original_price > deal_price:
+                    discount_pct = int(((original_price - deal_price) / original_price) * 100)
+
+                if discount_pct < 15 and deal_price >= 300:
+                    continue
+
+                image_url = product.get("image") or ""
+                image_url = image_url.replace("{w}x{h}", "600x600")
+                affiliate_url = path if path.startswith("http") else f"https://www.magazinevoce.com.br{path}"
+
+                results.append(
+                    {
+                        "product_name": name[:290],
+                        "original_price": original_price or deal_price,
+                        "deal_price": deal_price,
+                        "discount_pct": discount_pct,
+                        "affiliate_url": affiliate_url,
+                        "source": "magalu",
+                        "category": category,
+                        "image_url": image_url,
+                    }
+                )
+
+            return results
+
         items = soup.select("li[data-testid='product-card']")
 
         for item in items[:6]:
