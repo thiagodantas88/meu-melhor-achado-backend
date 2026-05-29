@@ -819,11 +819,17 @@ def generate_editorial_articles(db: Session, deals: list[dict], run_id: str, for
             reverse=True,
         )
 
-    selected_categories = [
+    eligible_categories = [
         category
         for category in CATEGORY_ORDER
         if category in categories and len(by_category.get(category, [])) >= 2
-    ][:3]
+    ]
+    if len(eligible_categories) > 3:
+        window_index = int(datetime.now(PROJECT_TZ).strftime("%j")) // 2
+        offset = window_index % len(eligible_categories)
+        eligible_categories = eligible_categories[offset:] + eligible_categories[:offset]
+
+    selected_categories = eligible_categories[:3]
     if not selected_categories:
         return 0
 
