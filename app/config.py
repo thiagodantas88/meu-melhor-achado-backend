@@ -8,7 +8,7 @@ class Settings(BaseSettings):
     AUTO_SEED_ON_START: bool = True
     SCRAPER_MORNING_HOUR: int = 6
     SCRAPER_MORNING_MINUTE: int = 0
-    SCRAPER_EVENING_HOUR: int = 18
+    SCRAPER_EVENING_HOUR: int = 15
     SCRAPER_EVENING_MINUTE: int = 30
     SCRAPER_ENABLED: bool = True
     SCRAPER_MAX_DEALS_PER_RUN: int = 30

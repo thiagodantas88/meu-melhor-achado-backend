@@ -16,7 +16,7 @@ def serialize_article(article: Article, full: bool = False):
         "slug": article.slug,
         "title": article.title,
         "summary": article.summary,
-        "publishedAt": article.published_at.strftime("%Y-%m-%d") if article.published_at else None,
+        "publishedAt": article.published_at.isoformat() if article.published_at else None,
         "readingTime": article.reading_time,
         "imageUrl": article.image_url,
         "isFeatured": article.is_featured,

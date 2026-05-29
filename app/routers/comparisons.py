@@ -1,4 +1,5 @@
-from datetime import date
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy import desc
@@ -9,6 +10,7 @@ from app.models import DailyComparison
 from app.rate_limit import limiter
 
 router = APIRouter(prefix="/comparisons", tags=["comparisons"])
+PROJECT_TZ = ZoneInfo("America/Fortaleza")
 
 
 def sanitize_product(product):
@@ -32,15 +34,18 @@ def serialize_comparison(comparison: DailyComparison):
         "productA": sanitize_product(comparison.product_a),
         "productB": sanitize_product(comparison.product_b),
         "summary": comparison.summary,
+        "verdict": comparison.verdict,
+        "criteria": comparison.criteria,
         "category": comparison.category,
         "date": comparison.date,
+        "publishedAt": comparison.created_at.isoformat() if comparison.created_at else None,
     }
 
 
 @router.get("/today")
 @limiter.limit("60/minute")
 def get_today(request: Request, db: Session = Depends(get_db)):
-    today = date.today().strftime("%Y-%m-%d")
+    today = datetime.now(PROJECT_TZ).strftime("%Y-%m-%d")
     items = (
         db.query(DailyComparison)
         .filter(DailyComparison.date == today)

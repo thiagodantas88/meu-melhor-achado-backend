@@ -63,3 +63,8 @@ def ensure_database_schema() -> None:
     logger.info("Tabela price_history garantida")
     Base.metadata.create_all(bind=engine, tables=[ScraperLog.__table__])
     logger.info("Tabela scraper_logs garantida")
+
+    comparison_columns = _table_columns("daily_comparisons")
+    if comparison_columns:
+        _add_column_if_missing("daily_comparisons", "verdict", "TEXT")
+        _add_column_if_missing("daily_comparisons", "criteria", "TEXT")

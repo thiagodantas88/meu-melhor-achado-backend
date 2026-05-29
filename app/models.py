@@ -89,6 +89,8 @@ class DailyComparison(Base):
     product_a = Column(JSON)
     product_b = Column(JSON)
     summary = Column(Text)
+    verdict = Column(Text, nullable=True)
+    criteria = Column(Text, nullable=True)
     category = Column(String(100))
     created_at = Column(DateTime, server_default=func.now())
 

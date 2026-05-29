@@ -17,9 +17,10 @@ não derrubar o backend caso uma página mude markup ou bloqueie a requisição.
 
 import logging
 import re
-from datetime import date, datetime
+from datetime import datetime
 from typing import Optional
 from urllib.parse import urljoin, urlparse
+from zoneinfo import ZoneInfo
 
 import httpx
 from bs4 import BeautifulSoup
@@ -31,6 +32,7 @@ from app.services.affiliate_links import is_product_affiliate_url
 from app.services.notifier import send_run_report
 
 logger = logging.getLogger(__name__)
+PROJECT_TZ = ZoneInfo("America/Fortaleza")
 
 HEADERS = {
     "User-Agent": (
@@ -88,18 +90,51 @@ MAGALU_CAPTCHA_TERMS: set[str] = set()
 
 COMPARISON_TEMPLATES = [
     {
-        "title": "T\u00f4 em d\u00favida entre o {a} e o {b} \u2014 qual levo?",
-        "summary": "Dois produtos parecidos, pre\u00e7os diferentes. Olhamos de perto e contamos o que cada um entrega de verdade.",
+        "title": "{a} ou {b}: qual compra faz mais sentido hoje?",
+        "summary": "Comparamos preco, proposta de uso e pontos de atencao para ajudar voce a decidir sem olhar apenas o desconto.",
     },
     {
-        "title": "{a} ou {b}? Veja qual faz mais sentido para voc\u00ea",
-        "summary": "N\u00e3o \u00e9 s\u00f3 o pre\u00e7o que conta \u2014 conforto, durabilidade e uso no dia a dia pesam tanto quanto o valor.",
+        "title": "{a} vs {b}: veja antes de escolher",
+        "summary": "Uma oferta pode parecer melhor no primeiro olhar, mas categoria, preco final e uso real mudam a decisao.",
     },
     {
-        "title": "{a} vs {b}: qual d\u00e1 mais valor ao seu dinheiro?",
-        "summary": "Olhamos os dois com cuidado: onde um vai melhor que o outro e para qual perfil cada um faz mais sentido.",
+        "title": "Comparativo rapido: {a} contra {b}",
+        "summary": "Resumo objetivo para entender qual produto combina mais com rotina, presente, reposicao ou compra urgente.",
     },
 ]
+
+CATEGORY_COMPARISON_CONTEXT = {
+    "bebidas": {
+        "criteria": "Para bebidas, vale olhar volume, perfil de sabor, ocasiao de consumo e preco por litro.",
+        "best_a": "Boa escolha para quem quer economizar sem sair da categoria pesquisada.",
+        "best_b": "Alternativa interessante para comparar marca, volume e proposta antes de fechar.",
+    },
+    "casa": {
+        "criteria": "Em casa, capacidade, potencia, consumo e facilidade de limpeza pesam tanto quanto o desconto.",
+        "best_a": "Faz sentido para quem prioriza preco e uso frequente na rotina.",
+        "best_b": "Vale considerar se entregar mais capacidade, marca ou acabamento.",
+    },
+    "tecnologia": {
+        "criteria": "Em tecnologia, compatibilidade, potencia, garantia e avaliacoes devem vir antes do menor preco.",
+        "best_a": "Boa opcao para resolver a necessidade gastando menos.",
+        "best_b": "Pode valer mais se tiver especificacao superior ou marca mais confiavel.",
+    },
+    "moda": {
+        "criteria": "Na moda, material, conforto, tamanho e versatilidade importam mais do que foto bonita.",
+        "best_a": "Boa opcao para quem busca preco e uso casual.",
+        "best_b": "Compare se o modelo combina melhor com sua rotina e guarda-roupa.",
+    },
+    "carro": {
+        "criteria": "Para carro, compatibilidade, fixacao, seguranca e durabilidade sao decisivos.",
+        "best_a": "Indicado para quem quer resolver uma necessidade pratica sem gastar muito.",
+        "best_b": "Pode compensar se oferecer melhor construcao ou ajuste.",
+    },
+    "home-office": {
+        "criteria": "No home office, conforto, ergonomia e durabilidade precisam acompanhar o preco.",
+        "best_a": "Boa escolha para melhorar a rotina com menor investimento.",
+        "best_b": "Vale olhar se entrega mais conforto ou ajuste para uso prolongado.",
+    },
+}
 
 
 def parse_price(text: str) -> Optional[float]:
@@ -435,10 +470,35 @@ def generate_comparisons(deals: list[dict]) -> list[dict]:
 
         product_a, product_b = items[0], items[1]
         template = COMPARISON_TEMPLATES[index % len(COMPARISON_TEMPLATES)]
+        context = CATEGORY_COMPARISON_CONTEXT.get(
+            category,
+            {
+                "criteria": "Compare preco, marca, proposta de uso e confiabilidade antes de decidir.",
+                "best_a": "Boa opcao para quem quer aproveitar o preco atual.",
+                "best_b": "Alternativa util para validar se existe melhor encaixe para sua rotina.",
+            },
+        )
+        price_gap = abs((product_a.get("deal_price") or 0) - (product_b.get("deal_price") or 0))
+        cheaper = product_a if (product_a.get("deal_price") or 0) <= (product_b.get("deal_price") or 0) else product_b
+        verdict = (
+            f"Se a prioridade for pagar menos agora, {cheaper['product_name'][:80]} leva vantagem. "
+            f"A diferenca entre eles e de aproximadamente {format_price(price_gap)}, entao vale conferir detalhes como marca, tamanho e avaliacao antes do clique."
+        )
         product_a_pros = (
-            ["Boa op\u00e7\u00e3o nessa faixa de pre\u00e7o", "Produto bem avaliado pelos compradores"]
+            [context["best_a"], context["criteria"]]
             if product_a.get("discount_pct", 0) == 0
-            else ["Melhor pre\u00e7o do dia", f"Economia de {product_a['discount_pct']}% em rela\u00e7\u00e3o ao pre\u00e7o cheio"]
+            else [
+                f"Economia de {product_a['discount_pct']}% em relacao ao preco cheio",
+                context["best_a"],
+            ]
+        )
+        product_b_pros = (
+            [context["best_b"], context["criteria"]]
+            if product_b.get("discount_pct", 0) == 0
+            else [
+                f"Economia de {product_b['discount_pct']}% em relacao ao preco cheio",
+                context["best_b"],
+            ]
         )
         comparisons.append(
             {
@@ -448,18 +508,22 @@ def generate_comparisons(deals: list[dict]) -> list[dict]:
                     month=month,
                 ),
                 "summary": template["summary"],
+                "verdict": verdict,
+                "criteria": context["criteria"],
                 "category": category,
                 "product_a": {
                     "name": product_a["product_name"],
                     "price": format_price(product_a["deal_price"]),
                     "affiliate_url": product_a["affiliate_url"],
                     "pros": product_a_pros,
+                    "best_for": context["best_a"],
                 },
                 "product_b": {
                     "name": product_b["product_name"],
                     "price": format_price(product_b["deal_price"]),
                     "affiliate_url": product_b["affiliate_url"],
-                    "pros": ["Muito bem avaliado por quem j\u00e1 comprou", "Boa alternativa para comparar antes de decidir"],
+                    "pros": product_b_pros,
+                    "best_for": context["best_b"],
                 },
             }
         )
@@ -547,7 +611,7 @@ def save_deals(db: Session, deals: list[dict], run_id: str) -> int:
 
 
 def run_category_terms(db: Session, category: str, terms: list[str]) -> dict:
-    run_id = datetime.now().strftime("%Y-%m-%d_%H:%M")
+    run_id = datetime.now(PROJECT_TZ).strftime("%Y-%m-%d_%H:%M")
     all_deals = []
     amazon_total = 0
     magalu_total = 0
@@ -575,8 +639,8 @@ def run_category_terms(db: Session, category: str, terms: list[str]) -> dict:
 
 def run_daily_job(db: Session):
     logger.info("Iniciando robo diario do Meu Melhor Achado")
-    today = date.today().strftime("%Y-%m-%d")
-    run_id = datetime.now().strftime("%Y-%m-%d_%H:%M")
+    today = datetime.now(PROJECT_TZ).strftime("%Y-%m-%d")
+    run_id = datetime.now(PROJECT_TZ).strftime("%Y-%m-%d_%H:%M")
     scraper_log = None
     MAGALU_CAPTCHA_TERMS.clear()
 
@@ -625,6 +689,8 @@ def run_daily_job(db: Session):
                     date=today,
                     title=comparison["title"],
                     summary=comparison["summary"],
+                    verdict=comparison.get("verdict"),
+                    criteria=comparison.get("criteria"),
                     category=comparison["category"],
                     product_a=comparison["product_a"],
                     product_b=comparison["product_b"],
