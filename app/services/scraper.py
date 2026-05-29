@@ -739,12 +739,12 @@ def build_editorial_sections(category: str, deals: list[dict]) -> list[ContentSe
 
     return [
         ContentSection(
-            type="paragraph",
+            type="text",
             text=context["intro"],
             order=1,
         ),
         ContentSection(
-            type="paragraph",
+            type="text",
             text=(
                 "A seleção abaixo foi gerada a partir das ofertas ativas mais recentes do site. "
                 "A ideia é trazer opções com preço atual, imagem de produto e link direto, evitando páginas genéricas de busca."
@@ -752,19 +752,19 @@ def build_editorial_sections(category: str, deals: list[dict]) -> list[ContentSe
             order=2,
         ),
         ContentSection(
-            type="list",
+            type="criteria",
             title=context["criteria_title"],
             items=context["criteria"],
             order=3,
         ),
         ContentSection(
-            type="list",
+            type="criteria",
             title="Destaques encontrados agora",
             items=product_lines,
             order=4,
         ),
         ContentSection(
-            type="paragraph",
+            type="text",
             text=context["closing"],
             order=5,
         ),
