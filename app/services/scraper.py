@@ -17,7 +17,7 @@ não derrubar o backend caso uma página mude markup ou bloqueie a requisição.
 
 import logging
 import re
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Optional
 from urllib.parse import urljoin, urlparse
 from zoneinfo import ZoneInfo
@@ -27,7 +27,7 @@ from bs4 import BeautifulSoup
 from sqlalchemy.orm import Session
 
 from app.config import settings
-from app.models import DailyComparison, Deal, PriceHistory, Product, ScraperLog
+from app.models import Article, Category, ContentSection, DailyComparison, Deal, PriceHistory, Product, ScraperLog
 from app.services.affiliate_links import is_product_affiliate_url
 from app.services.notifier import send_run_report
 
@@ -133,6 +133,87 @@ CATEGORY_COMPARISON_CONTEXT = {
         "criteria": "No home office, conforto, ergonomia e durabilidade precisam acompanhar o preço.",
         "best_a": "Boa escolha para melhorar a rotina com menor investimento.",
         "best_b": "Vale olhar se entrega mais conforto ou ajuste para uso prolongado.",
+    },
+}
+
+ARTICLE_CATEGORY_CONTEXT = {
+    "tecnologia": {
+        "headline": "Achados de tecnologia de hoje: acessórios úteis para comprar com mais critério",
+        "summary": "Selecionamos ofertas de tecnologia com foco em utilidade real, compatibilidade e preço atual.",
+        "intro": "Tecnologia boa não é só a que aparece com maior desconto. O ideal é olhar compatibilidade, potência, avaliações e se o produto resolve uma necessidade clara da rotina.",
+        "criteria_title": "O que observar antes de comprar",
+        "criteria": [
+            "Confirme se o acessório é compatível com seus aparelhos.",
+            "Compare potência, conexão e garantia antes de decidir.",
+            "Dê preferência a produtos com imagem e link direto de produto.",
+            "Preço baixo ajuda, mas especificação errada costuma sair caro.",
+        ],
+        "closing": "Para comprar melhor, escolha primeiro o uso principal e depois compare preço, marca e avaliação.",
+    },
+    "casa": {
+        "headline": "Achados para casa de hoje: itens práticos que merecem comparação",
+        "summary": "Ofertas para casa escolhidas pensando em uso frequente, praticidade e custo-benefício.",
+        "intro": "Produto para casa precisa funcionar bem no dia a dia. Antes de olhar só o desconto, vale comparar capacidade, facilidade de limpeza, consumo e espaço disponível.",
+        "criteria_title": "Antes de levar para casa",
+        "criteria": [
+            "Veja se a capacidade combina com o tamanho da família.",
+            "Confira potência, consumo e facilidade de limpeza.",
+            "Compare o preço atual com o benefício prático do produto.",
+            "Avalie se o item resolve um problema real da rotina.",
+        ],
+        "closing": "A melhor compra costuma ser a que reduz trabalho sem virar mais um objeto parado em casa.",
+    },
+    "carro": {
+        "headline": "Achados para carro de hoje: acessórios para uma rotina mais prática",
+        "summary": "Opções automotivas selecionadas por compatibilidade, utilidade e preço atual.",
+        "intro": "No carro, segurança e compatibilidade vêm antes do impulso. Um suporte, carregador ou acessório precisa ficar firme, encaixar bem e aguentar uso constante.",
+        "criteria_title": "Pontos que fazem diferença",
+        "criteria": [
+            "Confirme compatibilidade com o modelo do veículo e do celular.",
+            "Observe fixação, material e facilidade de instalação.",
+            "Evite escolher apenas pelo menor preço.",
+            "Prefira produtos úteis para trajetos frequentes.",
+        ],
+        "closing": "Acessório automotivo bom é aquele que ajuda sem atrapalhar a direção nem a organização do carro.",
+    },
+    "home-office": {
+        "headline": "Achados de home office de hoje: produtos para trabalhar melhor",
+        "summary": "Itens para home office avaliados por conforto, produtividade e valor atual.",
+        "intro": "No home office, pequenos itens podem mudar a rotina. Mouse, teclado, suporte e iluminação precisam combinar conforto, durabilidade e facilidade de uso.",
+        "criteria_title": "Como escolher melhor",
+        "criteria": [
+            "Priorize ergonomia se o uso for diário.",
+            "Veja dimensões, conexão e compatibilidade.",
+            "Compare preço com durabilidade esperada.",
+            "Escolha produtos que reduzam atrito no trabalho.",
+        ],
+        "closing": "Uma boa compra de home office deve deixar o trabalho mais fluido, não só a mesa mais bonita.",
+    },
+    "bebidas": {
+        "headline": "Achados de bebidas de hoje: opções para escolher com mais confiança",
+        "summary": "Bebidas selecionadas com atenção a marca, volume, ocasião de consumo e preço atual.",
+        "intro": "Em bebidas, o valor não está apenas no preço. Volume, marca, ocasião e perfil de sabor ajudam a entender se a oferta faz sentido para presente, reposição ou consumo casual.",
+        "criteria_title": "O que comparar em bebidas",
+        "criteria": [
+            "Confira volume e preço por litro quando possível.",
+            "Pense na ocasião: presente, reunião ou consumo cotidiano.",
+            "Compare marca, tipo e proposta antes do clique.",
+            "Lembre que preço e disponibilidade podem mudar rápido.",
+        ],
+        "closing": "A melhor escolha é a que combina preço atual com a ocasião certa de consumo.",
+    },
+    "moda": {
+        "headline": "Achados de moda feminina de hoje: peças para comparar antes de comprar",
+        "summary": "Seleção de moda feminina com foco em versatilidade, conforto e preço atual.",
+        "intro": "Moda feminina com bom custo-benefício precisa ir além da foto. Material, modelagem, conforto e facilidade de combinar são pontos que aumentam a chance de usar a peça muitas vezes.",
+        "criteria_title": "Antes de escolher a peça",
+        "criteria": [
+            "Confira material, modelagem e tabela de medidas.",
+            "Pense se a peça combina com o que você já tem.",
+            "Observe conforto e versatilidade para mais de uma ocasião.",
+            "Compare o preço atual com a frequência de uso esperada.",
+        ],
+        "closing": "Peça boa é aquela que entra fácil na rotina, combina com vários looks e não fica esquecida no guarda-roupa.",
     },
 }
 
@@ -601,6 +682,189 @@ def select_balanced_deals(deals: list[dict], max_deals: int) -> list[dict]:
     return selected
 
 
+def slugify(value: str) -> str:
+    accents = str.maketrans(
+        "áàãâäéèêëíìîïóòõôöúùûüçñÁÀÃÂÄÉÈÊËÍÌÎÏÓÒÕÔÖÚÙÛÜÇÑ",
+        "aaaaaeeeeiiiiooooouuuucnAAAAAEEEEIIIIOOOOOUUUUCN",
+    )
+    normalized = value.translate(accents).lower()
+    normalized = re.sub(r"[^a-z0-9]+", "-", normalized)
+    return normalized.strip("-") or "artigo"
+
+
+def build_article_products(deals: list[dict]) -> list[Product]:
+    products = []
+    for index, deal in enumerate(deals[:3]):
+        discount = int(deal.get("discount_pct") or 0)
+        pros = [
+            f"Preço atual: {format_price(deal['deal_price'])}",
+            f"Link direto validado na {deal.get('source', 'loja').title()}",
+        ]
+        if discount > 0:
+            pros.insert(1, f"Desconto informado de {discount}% em relação ao preço cheio")
+
+        products.append(
+            Product(
+                name=deal["product_name"][:290],
+                summary=(
+                    "Boa alternativa para comparar dentro da categoria antes de decidir. "
+                    "Confira medidas, avaliações e disponibilidade na página da loja."
+                ),
+                pros=pros,
+                cons=[
+                    "Preço e estoque podem mudar sem aviso.",
+                    "Vale conferir avaliações recentes antes da compra.",
+                ],
+                affiliate_url=deal["affiliate_url"],
+                image_url=deal.get("image_url"),
+                price=format_price(deal["deal_price"]),
+                original_price=format_price(deal.get("original_price") or deal["deal_price"]),
+                discount_pct=discount,
+                badge=["Maior desconto", "Mais barato", "Alternativa"][min(index, 2)],
+                source=deal.get("source") or "amazon",
+                store=deal.get("source") or "amazon",
+                in_stock=True,
+            )
+        )
+    return products
+
+
+def build_editorial_sections(category: str, deals: list[dict]) -> list[ContentSection]:
+    context = ARTICLE_CATEGORY_CONTEXT.get(category, ARTICLE_CATEGORY_CONTEXT["tecnologia"])
+    product_lines = [
+        f"{deal['product_name']} aparece por {format_price(deal['deal_price'])}"
+        + (f" com {int(deal.get('discount_pct') or 0)}% de desconto." if deal.get("discount_pct") else ".")
+        for deal in deals[:3]
+    ]
+
+    return [
+        ContentSection(
+            type="paragraph",
+            text=context["intro"],
+            order=1,
+        ),
+        ContentSection(
+            type="paragraph",
+            text=(
+                "A seleção abaixo foi gerada a partir das ofertas ativas mais recentes do site. "
+                "A ideia é trazer opções com preço atual, imagem de produto e link direto, evitando páginas genéricas de busca."
+            ),
+            order=2,
+        ),
+        ContentSection(
+            type="list",
+            title=context["criteria_title"],
+            items=context["criteria"],
+            order=3,
+        ),
+        ContentSection(
+            type="list",
+            title="Destaques encontrados agora",
+            items=product_lines,
+            order=4,
+        ),
+        ContentSection(
+            type="paragraph",
+            text=context["closing"],
+            order=5,
+        ),
+    ]
+
+
+def should_refresh_editorial_articles(db: Session) -> bool:
+    latest = (
+        db.query(Article)
+        .filter(Article.is_auto == True, Article.is_featured == True, Article.is_offer == False)
+        .order_by(Article.published_at.desc())
+        .first()
+    )
+    if not latest or not latest.published_at:
+        return True
+
+    return latest.published_at <= datetime.utcnow() - timedelta(days=2)
+
+
+def generate_editorial_articles(db: Session, deals: list[dict], run_id: str, force: bool = False) -> int:
+    if not force and not should_refresh_editorial_articles(db):
+        return 0
+
+    valid_deals = [
+        deal
+        for deal in deals
+        if deal.get("image_url")
+        and deal.get("affiliate_url")
+        and deal.get("deal_price")
+        and is_descriptive_product_name(deal.get("product_name") or "")
+        and is_product_affiliate_url(deal.get("affiliate_url"))
+    ]
+    if not valid_deals:
+        return 0
+
+    categories = {category.slug: category for category in db.query(Category).all()}
+    by_category: dict[str, list[dict]] = {}
+    seen_urls = set()
+    for deal in valid_deals:
+        url = deal["affiliate_url"]
+        if url in seen_urls:
+            continue
+        seen_urls.add(url)
+        by_category.setdefault(deal["category"], []).append(deal)
+
+    for items in by_category.values():
+        items.sort(
+            key=lambda item: (
+                item.get("discount_pct") or 0,
+                -(item.get("deal_price") or 0),
+            ),
+            reverse=True,
+        )
+
+    selected_categories = [
+        category
+        for category in CATEGORY_ORDER
+        if category in categories and len(by_category.get(category, [])) >= 2
+    ][:3]
+    if not selected_categories:
+        return 0
+
+    db.query(Article).filter(
+        Article.is_auto == True,
+        Article.is_featured == True,
+        Article.is_offer == False,
+    ).update({"is_featured": False}, synchronize_session=False)
+
+    created = 0
+    published_at = datetime.utcnow()
+    slug_suffix = published_at.strftime("%Y%m%d%H%M%S")
+    for category in selected_categories:
+        category_deals = by_category[category][:3]
+        context = ARTICLE_CATEGORY_CONTEXT.get(category, ARTICLE_CATEGORY_CONTEXT["tecnologia"])
+        slug = f"{slugify(context['headline'])}-{slug_suffix}-{created + 1}"
+
+        article = Article(
+            slug=slug[:200],
+            title=context["headline"],
+            summary=context["summary"],
+            category_id=categories[category].id,
+            published_at=published_at,
+            reading_time=6,
+            image_url=category_deals[0].get("image_url"),
+            is_active=True,
+            active=True,
+            is_auto=True,
+            is_offer=False,
+            is_featured=True,
+            sections=build_editorial_sections(category, category_deals),
+            products=build_article_products(category_deals),
+        )
+        db.add(article)
+        created += 1
+
+    db.commit()
+    logger.info("%s artigos editoriais gerados (run: %s)", created, run_id)
+    return created
+
+
 def save_deals(db: Session, deals: list[dict], run_id: str) -> int:
     saved = 0
     for deal_data in deals:
@@ -675,6 +939,7 @@ def run_daily_job(db: Session):
     magalu_total = 0
     fallback_count = 0
     error_count = 0
+    article_count = 0
 
     try:
         db.query(Deal).update({"is_active": False})
@@ -704,6 +969,8 @@ def run_daily_job(db: Session):
         logger.info("%s ofertas salvas", len(all_deals))
         logger.info("%s precos registrados no historico (run: %s)", len(all_deals), run_id)
 
+        article_count = generate_editorial_articles(db, all_deals, run_id)
+
         comparisons = generate_comparisons(all_deals)
         for comparison in comparisons:
             db.add(
@@ -725,6 +992,9 @@ def run_daily_job(db: Session):
             notes = None
             if MAGALU_CAPTCHA_TERMS:
                 notes = f"Magalu retornou captcha em {len(MAGALU_CAPTCHA_TERMS)} termos; fonte ignorada nesta rodada."
+            if article_count:
+                article_note = f"Artigos editoriais gerados: {article_count}."
+                notes = f"{notes} {article_note}" if notes else article_note
 
             scraper_log.deals_found = len(all_deals)
             scraper_log.deals_published = len(all_deals)

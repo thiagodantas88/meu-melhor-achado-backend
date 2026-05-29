@@ -1,4 +1,5 @@
 import os
+from datetime import datetime
 from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
@@ -9,16 +10,16 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models import Article, Category, DailyComparison, PriceHistory, ScraperLog
+from app.models import Article, Category, DailyComparison, Deal, PriceHistory, ScraperLog
 from app.services.affiliate_links import resolve_product_search_links
-from app.services.scraper import SEARCH_TERMS, run_category_terms, run_daily_job
+from app.services.scraper import PROJECT_TZ, SEARCH_TERMS, generate_editorial_articles, run_category_terms, run_daily_job
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 ADMIN_API_KEY = os.getenv("ADMIN_API_KEY", "")
 
 
 class ManualScraperRequest(BaseModel):
-    mode: Literal["general", "category", "product", "reference"] = "general"
+    mode: Literal["general", "category", "product", "reference", "articles"] = "general"
     category: Optional[str] = None
     term: Optional[str] = None
 
@@ -208,6 +209,31 @@ def run_manual_scraper(
 
         result = run_category_terms(db, category=payload.category, terms=terms)
         return {"status": "ok", "mode": payload.mode, **result}
+
+    if payload.mode == "articles":
+        run_id = datetime.now(PROJECT_TZ).strftime("%Y-%m-%d_%H:%M")
+        active_deals = (
+            db.query(Deal)
+            .filter(Deal.is_active == True)
+            .order_by(desc(Deal.created_at))
+            .limit(100)
+            .all()
+        )
+        deals = [
+            {
+                "product_name": deal.product_name,
+                "original_price": deal.original_price or deal.deal_price,
+                "deal_price": deal.deal_price,
+                "discount_pct": deal.discount_pct or 0,
+                "affiliate_url": deal.affiliate_url,
+                "source": deal.source,
+                "category": deal.category,
+                "image_url": deal.image_url,
+            }
+            for deal in active_deals
+        ]
+        generated = generate_editorial_articles(db, deals, run_id=run_id, force=True)
+        return {"status": "ok", "mode": payload.mode, "articlesGenerated": generated}
 
     if payload.mode in {"product", "reference"}:
         if not payload.category or not payload.term:
