@@ -137,9 +137,13 @@ CATEGORY_COMPARISON_CONTEXT = {
 }
 
 
-def compact_product_name(name: str, max_chars: int = 58) -> str:
+def compact_product_name(name: str, max_chars: int = 46) -> str:
     normalized = re.sub(r"\s+", " ", name).strip()
     normalized = re.sub(r"\s[-–—]\s.*$", "", normalized)
+    if len(normalized) > max_chars:
+        prefix = re.split(r"\s(?:com|compatível|para)\s", normalized, maxsplit=1, flags=re.IGNORECASE)[0]
+        if len(prefix) >= 18:
+            normalized = prefix
     if len(normalized) <= max_chars:
         return normalized
 
