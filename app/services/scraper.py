@@ -91,50 +91,68 @@ MAGALU_CAPTCHA_TERMS: set[str] = set()
 COMPARISON_TEMPLATES = [
     {
         "title": "{a} ou {b}: qual compra faz mais sentido hoje?",
-        "summary": "Comparamos preco, proposta de uso e pontos de atencao para ajudar voce a decidir sem olhar apenas o desconto.",
+        "summary": "Comparamos preço, proposta de uso e pontos de atenção para ajudar você a decidir sem olhar apenas o desconto.",
     },
     {
         "title": "{a} vs {b}: veja antes de escolher",
-        "summary": "Uma oferta pode parecer melhor no primeiro olhar, mas categoria, preco final e uso real mudam a decisao.",
+        "summary": "Uma oferta pode parecer melhor no primeiro olhar, mas categoria, preço final e uso real mudam a decisão.",
     },
     {
-        "title": "Comparativo rapido: {a} contra {b}",
-        "summary": "Resumo objetivo para entender qual produto combina mais com rotina, presente, reposicao ou compra urgente.",
+        "title": "Comparativo rápido: {a} contra {b}",
+        "summary": "Resumo objetivo para entender qual produto combina mais com rotina, presente, reposição ou compra urgente.",
     },
 ]
 
 CATEGORY_COMPARISON_CONTEXT = {
     "bebidas": {
-        "criteria": "Para bebidas, vale olhar volume, perfil de sabor, ocasiao de consumo e preco por litro.",
+        "criteria": "Para bebidas, vale olhar volume, perfil de sabor, ocasião de consumo e preço por litro.",
         "best_a": "Boa escolha para quem quer economizar sem sair da categoria pesquisada.",
         "best_b": "Alternativa interessante para comparar marca, volume e proposta antes de fechar.",
     },
     "casa": {
-        "criteria": "Em casa, capacidade, potencia, consumo e facilidade de limpeza pesam tanto quanto o desconto.",
-        "best_a": "Faz sentido para quem prioriza preco e uso frequente na rotina.",
+        "criteria": "Em casa, capacidade, potência, consumo e facilidade de limpeza pesam tanto quanto o desconto.",
+        "best_a": "Faz sentido para quem prioriza preço e uso frequente na rotina.",
         "best_b": "Vale considerar se entregar mais capacidade, marca ou acabamento.",
     },
     "tecnologia": {
-        "criteria": "Em tecnologia, compatibilidade, potencia, garantia e avaliacoes devem vir antes do menor preco.",
-        "best_a": "Boa opcao para resolver a necessidade gastando menos.",
-        "best_b": "Pode valer mais se tiver especificacao superior ou marca mais confiavel.",
+        "criteria": "Em tecnologia, compatibilidade, potência, garantia e avaliações devem vir antes do menor preço.",
+        "best_a": "Boa opção para resolver a necessidade gastando menos.",
+        "best_b": "Pode valer mais se tiver especificação superior ou marca mais confiável.",
     },
     "moda": {
         "criteria": "Na moda, material, conforto, tamanho e versatilidade importam mais do que foto bonita.",
-        "best_a": "Boa opcao para quem busca preco e uso casual.",
+        "best_a": "Boa opção para quem busca preço e uso casual.",
         "best_b": "Compare se o modelo combina melhor com sua rotina e guarda-roupa.",
     },
     "carro": {
-        "criteria": "Para carro, compatibilidade, fixacao, seguranca e durabilidade sao decisivos.",
-        "best_a": "Indicado para quem quer resolver uma necessidade pratica sem gastar muito.",
-        "best_b": "Pode compensar se oferecer melhor construcao ou ajuste.",
+        "criteria": "Para carro, compatibilidade, fixação, segurança e durabilidade são decisivos.",
+        "best_a": "Indicado para quem quer resolver uma necessidade prática sem gastar muito.",
+        "best_b": "Pode compensar se oferecer melhor construção ou ajuste.",
     },
     "home-office": {
-        "criteria": "No home office, conforto, ergonomia e durabilidade precisam acompanhar o preco.",
+        "criteria": "No home office, conforto, ergonomia e durabilidade precisam acompanhar o preço.",
         "best_a": "Boa escolha para melhorar a rotina com menor investimento.",
         "best_b": "Vale olhar se entrega mais conforto ou ajuste para uso prolongado.",
     },
 }
+
+
+def compact_product_name(name: str, max_chars: int = 58) -> str:
+    normalized = re.sub(r"\s+", " ", name).strip()
+    normalized = re.sub(r"\s[-–—]\s.*$", "", normalized)
+    if len(normalized) <= max_chars:
+        return normalized
+
+    words = []
+    current = 0
+    for word in normalized.split():
+        next_size = current + len(word) + (1 if words else 0)
+        if next_size > max_chars:
+            break
+        words.append(word)
+        current = next_size
+
+    return " ".join(words) or normalized[:max_chars].rstrip()
 
 
 def parse_price(text: str) -> Optional[float]:
@@ -473,22 +491,22 @@ def generate_comparisons(deals: list[dict]) -> list[dict]:
         context = CATEGORY_COMPARISON_CONTEXT.get(
             category,
             {
-                "criteria": "Compare preco, marca, proposta de uso e confiabilidade antes de decidir.",
-                "best_a": "Boa opcao para quem quer aproveitar o preco atual.",
-                "best_b": "Alternativa util para validar se existe melhor encaixe para sua rotina.",
+                "criteria": "Compare preço, marca, proposta de uso e confiabilidade antes de decidir.",
+                "best_a": "Boa opção para quem quer aproveitar o preço atual.",
+                "best_b": "Alternativa útil para validar se existe melhor encaixe para sua rotina.",
             },
         )
         price_gap = abs((product_a.get("deal_price") or 0) - (product_b.get("deal_price") or 0))
         cheaper = product_a if (product_a.get("deal_price") or 0) <= (product_b.get("deal_price") or 0) else product_b
         verdict = (
             f"Se a prioridade for pagar menos agora, {cheaper['product_name'][:80]} leva vantagem. "
-            f"A diferenca entre eles e de aproximadamente {format_price(price_gap)}, entao vale conferir detalhes como marca, tamanho e avaliacao antes do clique."
+            f"A diferença entre eles é de aproximadamente {format_price(price_gap)}, então vale conferir detalhes como marca, tamanho e avaliação antes do clique."
         )
         product_a_pros = (
             [context["best_a"], context["criteria"]]
             if product_a.get("discount_pct", 0) == 0
             else [
-                f"Economia de {product_a['discount_pct']}% em relacao ao preco cheio",
+                f"Economia de {product_a['discount_pct']}% em relação ao preço cheio",
                 context["best_a"],
             ]
         )
@@ -496,15 +514,15 @@ def generate_comparisons(deals: list[dict]) -> list[dict]:
             [context["best_b"], context["criteria"]]
             if product_b.get("discount_pct", 0) == 0
             else [
-                f"Economia de {product_b['discount_pct']}% em relacao ao preco cheio",
+                f"Economia de {product_b['discount_pct']}% em relação ao preço cheio",
                 context["best_b"],
             ]
         )
         comparisons.append(
             {
                 "title": template["title"].format(
-                    a=product_a["product_name"][:40],
-                    b=product_b["product_name"][:40],
+                    a=compact_product_name(product_a["product_name"]),
+                    b=compact_product_name(product_b["product_name"]),
                     month=month,
                 ),
                 "summary": template["summary"],

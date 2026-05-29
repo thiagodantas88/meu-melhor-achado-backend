@@ -83,14 +83,26 @@ def list_articles(
 
 @router.get("/featured")
 def get_featured(db: Session = Depends(get_db)):
-    articles = (
+    query = (
         db.query(Article)
         .options(joinedload(Article.category))
-        .filter(Article.is_active == True, Article.is_featured == True)
+        .filter(Article.is_active == True)
+    )
+    articles = (
+        query
+        .filter(Article.is_featured == True)
         .order_by(desc(Article.published_at))
         .limit(3)
         .all()
     )
+    if len(articles) < 3:
+        articles = (
+            query
+            .filter(Article.is_offer == False)
+            .order_by(desc(Article.published_at))
+            .limit(3)
+            .all()
+        )
     return [serialize_article(article) for article in articles]
 
 
