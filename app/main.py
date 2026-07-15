@@ -10,7 +10,7 @@ from slowapi import _rate_limit_exceeded_handler
 from app.config import settings
 from app.migrations import ensure_database_schema
 from app.rate_limit import limiter
-from app.routers import admin, articles, categories, comparisons, deals, offers
+from app.routers import admin, articles, categories, comparisons, deals, mobilia, offers
 from app.scheduler import start_scheduler
 from app.seed import seed
 
@@ -50,6 +50,7 @@ app.include_router(admin.router)
 app.include_router(categories.router)
 app.include_router(comparisons.router)
 app.include_router(deals.router)
+app.include_router(mobilia.router)
 app.include_router(offers.router)
 
 

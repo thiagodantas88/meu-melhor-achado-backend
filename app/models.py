@@ -137,3 +137,39 @@ class ScraperLog(Base):
     errors = Column(Integer, default=0)
     status = Column(String(50), default="ok")
     notes = Column(Text, nullable=True)
+
+class MobiliaSearch(Base):
+    __tablename__ = "mobilia_searches"
+
+    id = Column(Integer, primary_key=True)
+    product_name = Column(String(300), nullable=True)
+    product_model = Column(String(300), nullable=True)
+    product_type = Column(String(300), nullable=True)
+    description = Column(Text, nullable=True)
+    query = Column(String(1000), nullable=False)
+    cep = Column(String(20), default="59091-130")
+    results_count = Column(Integer, default=0)
+    created_at = Column(DateTime, server_default=func.now())
+
+    offers = relationship("MobiliaOffer", back_populates="search", cascade="all, delete-orphan")
+
+class MobiliaOffer(Base):
+    __tablename__ = "mobilia_offers"
+
+    id = Column(Integer, primary_key=True)
+    search_id = Column(Integer, ForeignKey("mobilia_searches.id"), nullable=True)
+    title = Column(String(500), nullable=False)
+    price = Column(Float, nullable=True)
+    original_price = Column(Float, nullable=True)
+    discount_pct = Column(Integer, nullable=True)
+    source = Column(String(100), nullable=False)
+    source_type = Column(String(50), default="marketplace")
+    url = Column(String(1500), nullable=True)
+    image_url = Column(String(1000), nullable=True)
+    coupon_code = Column(String(100), nullable=True)
+    coupon_note = Column(String(500), nullable=True)
+    shipping_note = Column(String(500), nullable=True)
+    is_partner = Column(Boolean, default=False)
+    created_at = Column(DateTime, server_default=func.now())
+
+    search = relationship("MobiliaSearch", back_populates="offers")

@@ -14,6 +14,8 @@ class Settings(BaseSettings):
     SCRAPER_MAX_DEALS_PER_RUN: int = 30
     SCRAPER_FALLBACK_ENABLED: bool = True
     LOG_SCRAPER_RUNS: bool = True
+    MOBILIA_USER: str = "thiagodantas@outlook.com"
+    MOBILIA_PASSWORD: str = "0987654321"
 
     class Config:
         env_file = ".env"
