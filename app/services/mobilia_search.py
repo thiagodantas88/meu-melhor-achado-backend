@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 import csv
+import base64
 import io
 import json
 import re
@@ -33,7 +34,9 @@ KNOWN_RETAILERS = [
     ("amazon.com.br", "Amazon", True, "partner"),
     ("magazinevoce.com.br", "Magalu", True, "partner"),
     ("magazineluiza.com.br", "Magalu", True, "partner"),
+    ("buscape.com.br", "Buscape", False, "aggregator"),
     ("mercadolivre.com.br", "Mercado Livre", False, "marketplace"),
+    ("shopee.com.br", "Shopee", False, "marketplace"),
     ("madeiramadeira.com.br", "MadeiraMadeira", False, "retailer"),
     ("mobly.com.br", "Mobly", False, "retailer"),
     ("leroymerlin.com.br", "Leroy Merlin", False, "retailer"),
@@ -115,6 +118,26 @@ def unwrap_duckduckgo_url(href: str) -> str:
     if query.get("uddg"):
         return query["uddg"][0]
     return absolute
+
+
+def unwrap_bing_url(href: str) -> str:
+    if not href:
+        return ""
+    absolute = urljoin("https://www.bing.com", href)
+    parsed = urlparse(absolute)
+    if "bing.com" not in parsed.netloc:
+        return absolute
+    query = parse_qs(parsed.query)
+    encoded = query.get("u", [""])[0]
+    if not encoded:
+        return absolute
+    if encoded.startswith("a1"):
+        encoded = encoded[2:]
+    try:
+        padding = "=" * (-len(encoded) % 4)
+        return base64.urlsafe_b64decode((encoded + padding).encode("utf-8")).decode("utf-8")
+    except Exception:
+        return absolute
 
 
 def source_from_url(url: str) -> Optional[tuple[str, bool, str]]:
@@ -459,6 +482,52 @@ def search_mercado_livre(query: str, cep: str, limit: int = 16) -> list[dict]:
     return offers
 
 
+def search_bing(query: str, cep: str, limit: int = 12) -> list[dict]:
+    url = f"https://www.bing.com/search?q={quote_plus(query + ' comprar Brasil promoção cupom')}"
+    offers: list[dict] = []
+    try:
+        with httpx.Client(headers=HEADERS, timeout=REQUEST_TIMEOUT, follow_redirects=True) as client:
+            response = client.get(url)
+        if response.status_code != 200:
+            return offers
+
+        soup = BeautifulSoup(response.text, "html.parser")
+        for item in soup.select("li.b_algo")[:limit]:
+            title_el = item.select_one("h2 a[href]")
+            snippet_el = item.select_one(".b_caption p")
+            if not title_el:
+                continue
+            offer_url = unwrap_bing_url(title_el.get("href", ""))
+            source_info = source_from_url(offer_url)
+            if not source_info:
+                continue
+
+            source, is_partner, source_type = source_info
+            title = clean_text(title_el.get_text(" ", strip=True))
+            snippet = clean_text(snippet_el.get_text(" ", strip=True) if snippet_el else "")
+            raw_text = f"{title} {snippet}"
+            coupon_code, coupon_note = detect_coupon_note(raw_text)
+            offers.append(
+                {
+                    "title": title[:500],
+                    "price": find_price(raw_text),
+                    "original_price": None,
+                    "discount_pct": None,
+                    "source": source,
+                    "source_type": source_type,
+                    "url": with_partner_tracking(offer_url),
+                    "image_url": None,
+                    "coupon_code": coupon_code,
+                    "coupon_note": coupon_note,
+                    "shipping_note": detect_shipping_note(raw_text, cep),
+                    "is_partner": is_partner,
+                }
+            )
+    except Exception:
+        return offers
+    return offers
+
+
 def search_duckduckgo(query: str, cep: str, limit: int = 14) -> list[dict]:
     url = f"https://duckduckgo.com/html/?q={quote_plus(query + ' comprar Brasil promoção cupom')}"
     offers: list[dict] = []
@@ -549,7 +618,7 @@ def search_store_shortcuts(query: str, cep: str) -> list[dict]:
 
 def search_mobilia_offers(query: str, cep: str = "59091-130") -> list[dict]:
     offers = []
-    searchers = [search_amazon, search_magalu, search_mercado_livre, search_duckduckgo]
+    searchers = [search_amazon, search_magalu, search_mercado_livre, search_bing, search_duckduckgo]
     with ThreadPoolExecutor(max_workers=len(searchers)) as executor:
         futures = [executor.submit(searcher, query, cep) for searcher in searchers]
         try:
