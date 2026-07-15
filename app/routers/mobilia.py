@@ -14,6 +14,7 @@ from app.models import MobiliaOffer, MobiliaSearch
 from app.rate_limit import limiter
 from app.services.mobilia_search import (
     build_query,
+    extract_offer_from_url,
     now_filename_suffix,
     offers_to_csv,
     offers_to_xlsx,
@@ -34,6 +35,11 @@ class MobiliaSearchRequest(BaseModel):
     productModel: Optional[str] = ""
     productType: Optional[str] = ""
     description: Optional[str] = ""
+    cep: str = DEFAULT_CEP
+
+
+class MobiliaImportLinkRequest(BaseModel):
+    url: str
     cep: str = DEFAULT_CEP
 
 
@@ -179,6 +185,57 @@ def search(
                 is_partner=bool(offer.get("is_partner")),
             )
         )
+
+    db.commit()
+    db.refresh(search_row)
+    return serialize_search(search_row, include_offers=True)
+
+
+@router.post("/import-link")
+@limiter.limit("20/minute")
+def import_link(
+    payload: MobiliaImportLinkRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    _: str = Depends(require_mobilia_auth),
+):
+    url = (payload.url or "").strip()
+    if not url.startswith(("http://", "https://")):
+        raise HTTPException(status_code=400, detail="Informe um link completo do produto")
+
+    offer = extract_offer_from_url(url, payload.cep or DEFAULT_CEP)
+    if not offer:
+        raise HTTPException(
+            status_code=422,
+            detail="Nao consegui extrair preco e pagina direta desse link. Verifique se e uma pagina de produto.",
+        )
+
+    search_row = MobiliaSearch(
+        product_name=offer["title"][:300],
+        query=f"Link importado: {offer['title']}",
+        cep=payload.cep or DEFAULT_CEP,
+        results_count=1,
+    )
+    db.add(search_row)
+    db.flush()
+
+    db.add(
+        MobiliaOffer(
+            search_id=search_row.id,
+            title=offer["title"],
+            price=offer.get("price"),
+            original_price=offer.get("original_price"),
+            discount_pct=offer.get("discount_pct"),
+            source=offer["source"],
+            source_type=offer.get("source_type") or "marketplace",
+            url=offer.get("url"),
+            image_url=offer.get("image_url"),
+            coupon_code=offer.get("coupon_code"),
+            coupon_note=offer.get("coupon_note"),
+            shipping_note=offer.get("shipping_note"),
+            is_partner=bool(offer.get("is_partner")),
+        )
+    )
 
     db.commit()
     db.refresh(search_row)

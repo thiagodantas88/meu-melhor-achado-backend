@@ -42,6 +42,12 @@ KNOWN_RETAILERS = [
     ("leroymerlin.com.br", "Leroy Merlin", False, "retailer"),
     ("casasbahia.com.br", "Casas Bahia", False, "retailer"),
     ("pontofrio.com.br", "Ponto Frio", False, "retailer"),
+    ("carrefour.com.br", "Carrefour", False, "retailer"),
+    ("havan.com.br", "Havan", False, "retailer"),
+    ("ferreiracosta.com", "Ferreira Costa", False, "retailer"),
+    ("fastshop.com.br", "Fast Shop", False, "retailer"),
+    ("samsung.com", "Samsung", False, "brand_store"),
+    ("electrolux.com.br", "Electrolux", False, "brand_store"),
     ("tokstok.com.br", "Tok&Stok", False, "retailer"),
     ("casaevideo.com.br", "Casa & Video", False, "retailer"),
     ("meumoveldemadeira.com.br", "Meu Movel de Madeira", False, "retailer"),
@@ -271,6 +277,77 @@ def read_jsonld_price(soup: BeautifulSoup) -> Optional[float]:
     return None
 
 
+def read_jsonld_product_data(soup: BeautifulSoup) -> dict:
+    product: dict = {}
+
+    def product_type(value) -> bool:
+        if isinstance(value, list):
+            return any(product_type(item) for item in value)
+        return str(value or "").lower().endswith("product")
+
+    def normalize_image(value) -> Optional[str]:
+        if isinstance(value, list) and value:
+            return normalize_image(value[0])
+        if isinstance(value, dict):
+            return value.get("url") or value.get("contentUrl")
+        if isinstance(value, str):
+            return value
+        return None
+
+    def read_offer(offers):
+        if isinstance(offers, list):
+            prices = [read_offer(item) for item in offers]
+            prices = [price for price in prices if price is not None]
+            return min(prices) if prices else None
+        if isinstance(offers, dict):
+            price = offers.get("price") or offers.get("lowPrice") or offers.get("highPrice")
+            return parse_price(str(price)) if price is not None else None
+        return None
+
+    def walk(value):
+        nonlocal product
+        if isinstance(value, dict):
+            if product_type(value.get("@type")) or value.get("offers"):
+                product = {
+                    "title": clean_text(value.get("name") or product.get("title") or ""),
+                    "image_url": normalize_image(value.get("image")) or product.get("image_url"),
+                    "price": read_offer(value.get("offers")) or product.get("price"),
+                }
+            graph = value.get("@graph")
+            if isinstance(graph, list):
+                walk(graph)
+            for nested in value.values():
+                if isinstance(nested, (dict, list)):
+                    walk(nested)
+        elif isinstance(value, list):
+            for item in value:
+                walk(item)
+
+    for script in soup.select("script[type='application/ld+json']"):
+        try:
+            payload = json.loads(script.string or "{}")
+        except Exception:
+            continue
+        walk(payload)
+        if product.get("title") and product.get("price"):
+            break
+    return product
+
+
+def meta_content(soup: BeautifulSoup, selectors: list[tuple[str, str]]) -> Optional[str]:
+    for key, value in selectors:
+        tag = soup.find("meta", attrs={key: value})
+        if tag and tag.get("content"):
+            return clean_text(tag.get("content") or "")
+    return None
+
+
+def canonical_url(soup: BeautifulSoup, fallback_url: str) -> str:
+    canonical = soup.find("link", rel="canonical")
+    href = canonical.get("href") if canonical else None
+    return urljoin(fallback_url, href) if href else fallback_url
+
+
 def enrich_offer_from_page(offer: dict) -> dict:
     url = offer.get("url") or ""
     if not source_from_url(url):
@@ -300,6 +377,99 @@ def enrich_offer_from_page(offer: dict) -> dict:
         return offer
     except Exception:
         return offer
+
+
+def extract_offer_from_url(url: str, cep: str = "59091-130") -> Optional[dict]:
+    source_info = source_from_url(url)
+    if not source_info:
+        return None
+
+    try:
+        with httpx.Client(headers=HEADERS, timeout=httpx.Timeout(10.0, connect=4.0), follow_redirects=True) as client:
+            response = client.get(url)
+    except Exception:
+        return None
+
+    if response.status_code >= 400:
+        return None
+
+    body_start = response.text[:5000].lower()
+    if any(marker in body_start for marker in ["captcha", "account-verification", "az-request-verify", "unusual traffic"]):
+        return None
+
+    final_url = str(response.url)
+    source, is_partner, source_type = source_info
+    soup = BeautifulSoup(response.text, "html.parser")
+    jsonld = read_jsonld_product_data(soup)
+
+    title = (
+        jsonld.get("title")
+        or meta_content(
+            soup,
+            [
+                ("property", "og:title"),
+                ("name", "twitter:title"),
+                ("itemprop", "name"),
+            ],
+        )
+        or clean_text(soup.title.get_text(" ", strip=True) if soup.title else "")
+    )
+    title = re.sub(r"\s+[|-]\s+(Comprar|Havan|Magazine Luiza|Magalu|Carrefour|Amazon).*", "", title, flags=re.IGNORECASE)
+
+    price_meta = meta_content(
+        soup,
+        [
+            ("property", "product:price:amount"),
+            ("property", "og:price:amount"),
+            ("name", "twitter:data1"),
+            ("itemprop", "price"),
+        ],
+    )
+    price = jsonld.get("price") or parse_price(price_meta) or find_price(soup.get_text(" ", strip=True))
+
+    original_price = None
+    text = soup.get_text(" ", strip=True)
+    all_prices = [parse_price(match.group(0)) for match in PRICE_RE.finditer(text[:30000])]
+    all_prices = [item for item in all_prices if item]
+    if price and all_prices:
+        higher_prices = [item for item in all_prices if item > price]
+        original_price = min(higher_prices) if higher_prices else None
+
+    discount_pct = None
+    if original_price and price and original_price > price:
+        discount_pct = int(((original_price - price) / original_price) * 100)
+
+    image_url = (
+        jsonld.get("image_url")
+        or meta_content(
+            soup,
+            [
+                ("property", "og:image"),
+                ("name", "twitter:image"),
+                ("itemprop", "image"),
+            ],
+        )
+    )
+    coupon_code, coupon_note = detect_coupon_note(text[:20000])
+    offer_url = with_partner_tracking(canonical_url(soup, final_url))
+
+    if not title or not price or not is_product_url(offer_url, source):
+        return None
+
+    return {
+        "title": title[:500],
+        "price": price,
+        "original_price": original_price,
+        "discount_pct": discount_pct,
+        "source": source,
+        "source_type": source_type,
+        "url": offer_url,
+        "image_url": normalize_image_url(image_url, final_url),
+        "coupon_code": coupon_code,
+        "coupon_note": coupon_note,
+        "shipping_note": detect_shipping_note(text[:20000], cep),
+        "is_partner": is_partner,
+    }
 
 
 def sort_offers(offers: list[dict], query: str = "") -> list[dict]:
