@@ -83,10 +83,70 @@ def clean_text(value: str) -> str:
     return re.sub(r"\s+", " ", value or "").strip()
 
 
+def normalize_text(value: str) -> str:
+    replacements = str.maketrans("áàãâéêíóôõúüçÁÀÃÂÉÊÍÓÔÕÚÜÇ", "aaaaeeiooouucAAAAEEIOOOUUC")
+    return clean_text(value).translate(replacements).lower()
+
+
 def build_query(product_name: str = "", product_model: str = "", product_type: str = "", description: str = "") -> str:
     parts = [product_name, product_model, product_type, description]
     query = " ".join(clean_text(part) for part in parts if clean_text(part))
     return clean_text(query)
+
+
+def query_tokens(query: str) -> list[str]:
+    stopwords = {
+        "com",
+        "para",
+        "por",
+        "uma",
+        "uns",
+        "das",
+        "dos",
+        "que",
+        "novo",
+        "nova",
+        "produto",
+        "modelo",
+        "tipo",
+        "moveis",
+        "movel",
+    }
+    tokens = re.findall(r"[a-z0-9]+", normalize_text(query))
+    return [token for token in tokens if len(token) >= 2 and token not in stopwords]
+
+
+def is_relevant_offer(offer: dict, query: str) -> bool:
+    tokens = query_tokens(query)
+    if not tokens:
+        return True
+    haystack = normalize_text(f"{offer.get('title') or ''} {offer.get('url') or ''}")
+    numeric_or_model_tokens = [token for token in tokens if any(char.isdigit() for char in token)]
+    if numeric_or_model_tokens and not all(token in haystack for token in numeric_or_model_tokens):
+        return False
+    matched = sum(1 for token in tokens if token in haystack)
+    required_ratio = 0.6 if len(tokens) >= 3 else 0.5
+    return matched / len(tokens) >= required_ratio
+
+
+def is_product_url(url: str, source: str) -> bool:
+    parsed = urlparse(url)
+    host = parsed.netloc.lower()
+    path = parsed.path.lower()
+    query = parsed.query.lower()
+    if not url or any(marker in path for marker in ["/busca", "/search", "/catalogsearch", "/lista", "/collections"]):
+        return False
+    if source == "Amazon":
+        return "/dp/" in path or "/gp/product/" in path
+    if source == "Magalu":
+        return "/p/" in path or (bool(path.strip("/")) and not path.endswith("/busca/"))
+    if source == "Mercado Livre":
+        return "produto.mercadolivre.com.br" in host and "/mlb-" in path
+    if source in {"Buscape", "Shopee"}:
+        return False
+    if "q=" in query or "keyword=" in query:
+        return False
+    return True
 
 
 def detect_coupon_note(text: str) -> tuple[Optional[str], Optional[str]]:
@@ -242,14 +302,21 @@ def enrich_offer_from_page(offer: dict) -> dict:
         return offer
 
 
-def sort_offers(offers: list[dict]) -> list[dict]:
+def sort_offers(offers: list[dict], query: str = "") -> list[dict]:
     seen: set[str] = set()
     unique = []
     for offer in offers:
         url = offer.get("url") or ""
         title = offer.get("title") or ""
+        source = offer.get("source") or ""
         key = url or f"{offer.get('source')}:{title}:{offer.get('price')}"
-        if key in seen or not title:
+        if (
+            key in seen
+            or not title
+            or offer.get("price") is None
+            or not is_product_url(url, source)
+            or (query and not is_relevant_offer(offer, query))
+        ):
             continue
         seen.add(key)
         unique.append(offer)
@@ -525,7 +592,7 @@ def search_bing(query: str, cep: str, limit: int = 12) -> list[dict]:
             )
     except Exception:
         return offers
-    return offers
+    return [offer for offer in offers if offer.get("price") is not None and is_product_url(offer.get("url") or "", offer.get("source") or "")]
 
 
 def search_duckduckgo(query: str, cep: str, limit: int = 14) -> list[dict]:
@@ -582,7 +649,7 @@ def search_duckduckgo(query: str, cep: str, limit: int = 14) -> list[dict]:
                 offers = enriched + offers[8:]
     except Exception:
         return offers
-    return offers
+    return [offer for offer in offers if offer.get("price") is not None and is_product_url(offer.get("url") or "", offer.get("source") or "")]
 
 
 def search_store_shortcuts(query: str, cep: str) -> list[dict]:
@@ -630,8 +697,7 @@ def search_mobilia_offers(query: str, cep: str = "59091-130") -> list[dict]:
         except TimeoutError:
             for future in futures:
                 future.cancel()
-    sorted_offers = sort_offers(offers)
-    return sorted_offers or search_store_shortcuts(query, cep)
+    return sort_offers(offers, query)
 
 
 def offers_to_csv(rows: list[dict]) -> bytes:
