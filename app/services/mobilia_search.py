@@ -1,13 +1,14 @@
 # -*- coding: utf-8 -*-
 import csv
 import io
+import json
 import re
 import zipfile
 from concurrent.futures import ThreadPoolExecutor, TimeoutError, as_completed
 from datetime import datetime
 from html import escape
 from typing import Optional
-from urllib.parse import quote_plus, urljoin, urlparse
+from urllib.parse import parse_qs, quote_plus, urljoin, urlparse, urlunparse
 
 import httpx
 from bs4 import BeautifulSoup
@@ -27,6 +28,22 @@ HEADERS = {
 
 PARTNER_SOURCES = {"amazon", "magalu"}
 REQUEST_TIMEOUT = httpx.Timeout(8.0, connect=4.0)
+PRICE_RE = re.compile(r"R\$\s*\d{1,3}(?:\.\d{3})*(?:,\d{2})?", re.IGNORECASE)
+KNOWN_RETAILERS = [
+    ("amazon.com.br", "Amazon", True, "partner"),
+    ("magazinevoce.com.br", "Magalu", True, "partner"),
+    ("magazineluiza.com.br", "Magalu", True, "partner"),
+    ("mercadolivre.com.br", "Mercado Livre", False, "marketplace"),
+    ("madeiramadeira.com.br", "MadeiraMadeira", False, "retailer"),
+    ("mobly.com.br", "Mobly", False, "retailer"),
+    ("leroymerlin.com.br", "Leroy Merlin", False, "retailer"),
+    ("casasbahia.com.br", "Casas Bahia", False, "retailer"),
+    ("pontofrio.com.br", "Ponto Frio", False, "retailer"),
+    ("tokstok.com.br", "Tok&Stok", False, "retailer"),
+    ("casaevideo.com.br", "Casa & Video", False, "retailer"),
+    ("meumoveldemadeira.com.br", "Meu Movel de Madeira", False, "retailer"),
+    ("westwing.com.br", "Westwing", False, "retailer"),
+]
 
 
 def parse_price(text: Optional[str]) -> Optional[float]:
@@ -41,6 +58,13 @@ def parse_price(text: Optional[str]) -> Optional[float]:
         return float(cleaned)
     except ValueError:
         return None
+
+
+def find_price(text: Optional[str]) -> Optional[float]:
+    if not text:
+        return None
+    match = PRICE_RE.search(text)
+    return parse_price(match.group(0)) if match else None
 
 
 def normalize_image_url(candidate: Optional[str], base_url: str) -> Optional[str]:
@@ -82,6 +106,119 @@ def detect_shipping_note(text: str, cep: str) -> Optional[str]:
     return f"Frete não informado na listagem. Calcule no checkout para o CEP {cep}."
 
 
+def unwrap_duckduckgo_url(href: str) -> str:
+    if not href:
+        return ""
+    absolute = urljoin("https://duckduckgo.com", href)
+    parsed = urlparse(absolute)
+    query = parse_qs(parsed.query)
+    if query.get("uddg"):
+        return query["uddg"][0]
+    return absolute
+
+
+def source_from_url(url: str) -> Optional[tuple[str, bool, str]]:
+    host = urlparse(url).netloc.lower().removeprefix("www.")
+    for domain, source, is_partner, source_type in KNOWN_RETAILERS:
+        if host == domain or host.endswith(f".{domain}") or domain in host:
+            return source, is_partner, source_type
+    return None
+
+
+def magalu_store_path() -> str:
+    store = settings.MAGALU_STORE.strip("/")
+    parsed = urlparse(store)
+    return parsed.path.strip("/") if parsed.scheme else store
+
+
+def with_partner_tracking(url: str) -> str:
+    parsed = urlparse(url)
+    host = parsed.netloc.lower()
+    if "amazon.com.br" in host:
+        if "tag=" in parsed.query:
+            return url
+        separator = "&" if parsed.query else "?"
+        return f"{url}{separator}tag={settings.AMAZON_TAG}"
+    if "magazinevoce.com.br" in host:
+        path_parts = [part for part in parsed.path.split("/") if part]
+        if path_parts:
+            path_parts[0] = magalu_store_path()
+        else:
+            path_parts = [magalu_store_path()]
+        return urlunparse(parsed._replace(path="/" + "/".join(path_parts)))
+    if "magazineluiza.com.br" in host:
+        return urlunparse(
+            parsed._replace(
+                scheme="https",
+                netloc="www.magazinevoce.com.br",
+                path=f"/{magalu_store_path()}{parsed.path}",
+            )
+        )
+    return url
+
+
+def read_jsonld_price(soup: BeautifulSoup) -> Optional[float]:
+    def walk(value):
+        if isinstance(value, dict):
+            offers = value.get("offers")
+            if isinstance(offers, dict):
+                price = offers.get("price") or offers.get("lowPrice") or offers.get("highPrice")
+                parsed = parse_price(str(price)) if price is not None else None
+                if parsed:
+                    return parsed
+            for nested in value.values():
+                parsed = walk(nested)
+                if parsed:
+                    return parsed
+        if isinstance(value, list):
+            for item in value:
+                parsed = walk(item)
+                if parsed:
+                    return parsed
+        return None
+
+    for script in soup.select("script[type='application/ld+json']"):
+        try:
+            payload = json.loads(script.string or "{}")
+        except Exception:
+            continue
+        parsed = walk(payload)
+        if parsed:
+            return parsed
+    return None
+
+
+def enrich_offer_from_page(offer: dict) -> dict:
+    url = offer.get("url") or ""
+    if not source_from_url(url):
+        return offer
+    try:
+        with httpx.Client(headers=HEADERS, timeout=httpx.Timeout(4.0, connect=2.0), follow_redirects=True) as client:
+            response = client.get(url)
+        if response.status_code != 200 or "captcha" in response.text[:3000].lower():
+            return offer
+        soup = BeautifulSoup(response.text, "html.parser")
+        if not offer.get("image_url"):
+            image_meta = (
+                soup.select_one("meta[property='og:image']")
+                or soup.select_one("meta[name='twitter:image']")
+                or soup.select_one("link[rel='image_src']")
+            )
+            image = image_meta.get("content") or image_meta.get("href") if image_meta else None
+            offer["image_url"] = normalize_image_url(image, str(response.url))
+        if offer.get("price") is None:
+            price_meta = (
+                soup.select_one("meta[property='product:price:amount']")
+                or soup.select_one("meta[property='og:price:amount']")
+                or soup.select_one("meta[itemprop='price']")
+            )
+            price = parse_price(price_meta.get("content") if price_meta else None) or read_jsonld_price(soup)
+            offer["price"] = price
+        return offer
+    except Exception:
+        return offer
+
+
 def sort_offers(offers: list[dict]) -> list[dict]:
     seen: set[str] = set()
     unique = []
@@ -89,7 +226,7 @@ def sort_offers(offers: list[dict]) -> list[dict]:
         url = offer.get("url") or ""
         title = offer.get("title") or ""
         key = url or f"{offer.get('source')}:{title}:{offer.get('price')}"
-        if key in seen or not title or not offer.get("price"):
+        if key in seen or not title:
             continue
         seen.add(key)
         unique.append(offer)
@@ -322,13 +459,101 @@ def search_mercado_livre(query: str, cep: str, limit: int = 16) -> list[dict]:
     return offers
 
 
+def search_duckduckgo(query: str, cep: str, limit: int = 14) -> list[dict]:
+    url = f"https://duckduckgo.com/html/?q={quote_plus(query + ' comprar Brasil promoção cupom')}"
+    offers: list[dict] = []
+    try:
+        with httpx.Client(headers=HEADERS, timeout=REQUEST_TIMEOUT, follow_redirects=True) as client:
+            response = client.get(url)
+        if response.status_code != 200 or "Unfortunately, bots use DuckDuckGo too" in response.text:
+            return offers
+
+        soup = BeautifulSoup(response.text, "html.parser")
+        for item in soup.select(".result")[:limit]:
+            title_el = item.select_one(".result__a")
+            snippet_el = item.select_one(".result__snippet")
+            if not title_el:
+                continue
+            offer_url = unwrap_duckduckgo_url(title_el.get("href", ""))
+            source_info = source_from_url(offer_url)
+            if not source_info:
+                continue
+
+            source, is_partner, source_type = source_info
+            title = clean_text(title_el.get_text(" ", strip=True))
+            snippet = clean_text(snippet_el.get_text(" ", strip=True) if snippet_el else "")
+            raw_text = f"{title} {snippet}"
+            coupon_code, coupon_note = detect_coupon_note(raw_text)
+            offers.append(
+                {
+                    "title": title[:500],
+                    "price": find_price(raw_text),
+                    "original_price": None,
+                    "discount_pct": None,
+                    "source": source,
+                    "source_type": source_type,
+                    "url": with_partner_tracking(offer_url),
+                    "image_url": None,
+                    "coupon_code": coupon_code,
+                    "coupon_note": coupon_note,
+                    "shipping_note": detect_shipping_note(raw_text, cep),
+                    "is_partner": is_partner,
+                }
+            )
+
+        if offers:
+            with ThreadPoolExecutor(max_workers=4) as executor:
+                futures = [executor.submit(enrich_offer_from_page, offer) for offer in offers[:8]]
+                enriched = []
+                for future in as_completed(futures, timeout=8):
+                    try:
+                        enriched.append(future.result(timeout=1))
+                    except Exception:
+                        continue
+                offers = enriched + offers[8:]
+    except Exception:
+        return offers
+    return offers
+
+
+def search_store_shortcuts(query: str, cep: str) -> list[dict]:
+    encoded = quote_plus(query)
+    shortcuts = [
+        ("Amazon", "partner", True, f"https://www.amazon.com.br/s?k={encoded}&tag={settings.AMAZON_TAG}"),
+        ("Magalu", "partner", True, f"https://www.magazinevoce.com.br/{magalu_store_path()}/busca/{encoded}/"),
+        ("MadeiraMadeira", "retailer", False, f"https://www.madeiramadeira.com.br/busca?q={encoded}"),
+        ("Mobly", "retailer", False, f"https://www.mobly.com.br/catalogsearch/result/?q={encoded}"),
+        ("Mercado Livre", "marketplace", False, f"https://lista.mercadolivre.com.br/{encoded}"),
+        ("Leroy Merlin", "retailer", False, f"https://www.leroymerlin.com.br/search?term={encoded}"),
+        ("Casas Bahia", "retailer", False, f"https://www.casasbahia.com.br/{encoded}/b"),
+        ("Tok&Stok", "retailer", False, f"https://www.tokstok.com.br/busca?q={encoded}"),
+    ]
+    return [
+        {
+            "title": f'Pesquisar "{query}" na {source}',
+            "price": None,
+            "original_price": None,
+            "discount_pct": None,
+            "source": source,
+            "source_type": source_type,
+            "url": url,
+            "image_url": None,
+            "coupon_code": None,
+            "coupon_note": "Preço não disponível na listagem automática. Abra a loja para confirmar ofertas e cupons.",
+            "shipping_note": f"Calcule o frete no checkout para o CEP {cep}.",
+            "is_partner": is_partner,
+        }
+        for source, source_type, is_partner, url in shortcuts
+    ]
+
+
 def search_mobilia_offers(query: str, cep: str = "59091-130") -> list[dict]:
     offers = []
-    searchers = [search_amazon, search_magalu, search_mercado_livre]
+    searchers = [search_amazon, search_magalu, search_mercado_livre, search_duckduckgo]
     with ThreadPoolExecutor(max_workers=len(searchers)) as executor:
         futures = [executor.submit(searcher, query, cep) for searcher in searchers]
         try:
-            for future in as_completed(futures, timeout=12):
+            for future in as_completed(futures, timeout=15):
                 try:
                     offers.extend(future.result(timeout=1))
                 except Exception:
@@ -336,7 +561,8 @@ def search_mobilia_offers(query: str, cep: str = "59091-130") -> list[dict]:
         except TimeoutError:
             for future in futures:
                 future.cancel()
-    return sort_offers(offers)
+    sorted_offers = sort_offers(offers)
+    return sorted_offers or search_store_shortcuts(query, cep)
 
 
 def offers_to_csv(rows: list[dict]) -> bytes:
